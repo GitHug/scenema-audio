@@ -6,7 +6,7 @@
 
 Every existing text-to-speech system converts words into sound, but none of them perform. Speech that merely pronounces words correctly is functionally useless for filmmaking, audiobooks, or any context where the emotional delivery carries as much meaning as the words themselves. Scenema Audio generates speech with intention, pacing, breath control, and emotional arcs that shift within a single generation, all from a text prompt that describes not just what to say but how to say it.
 
-Built on an audio diffusion transformer extracted from [LTX 2.3](https://github.com/Lightricks/LTX-2)'s 22B parameter audiovisual model, it learned how people actually sound in real scenes: angry, laughing, whispering, crying, singing, exhausted, terrified.
+Built on an audio diffusion transformer extracted from [LTX 2.3](https://github.com/Lightricks/LTX-2)'s 22B parameter audiovisual model, it learned how people actually sound in real scenes: angry, laughing, whispering, crying, exhausted, terrified.
 
 ## Quick Start
 
@@ -47,7 +47,7 @@ curl -X POST http://localhost:8000/generate \
 curl -X POST http://localhost:8000/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "<speak voice=\"A young woman with a smoky jazz-singer quality. Low register, intimate.\" gender=\"female\">The city never really sleeps. It just closes its eyes and pretends for a while.</speak>",
+    "prompt": "<speak voice=\"A young woman with a smoky, low register voice. Intimate, confessional tone.\" gender=\"female\">The city never really sleeps. It just closes its eyes and pretends for a while.</speak>",
     "mode": "voice_design"
   }' \
   --output voice_preview.wav
@@ -197,17 +197,6 @@ Emotional state shifts within a single generation. Action tags function as stage
   to tell me how to run my business.
   <action>Voice rising, finger pointing</action>
   I built this thing from nothing while you were sitting on your ass.
-</speak>
-```
-
-### Singing
-
-```xml
-<speak voice="A soulful female alto singing with raw emotion.
-Blues-jazz phrasing, slight vibrato on sustained notes."
-gender="female">
-  <action>Soft piano intro, she takes a breath.</action>
-  I heard love was a losing game, played it once and lost the same.
 </speak>
 ```
 
