@@ -2,6 +2,8 @@
 
 **Zero-shot expressive voice cloning and speech generation.**
 
+**[Visit scenema.ai/audio to hear all demos and try it out.](https://scenema.ai/audio)**
+
 Every existing text-to-speech system converts words into sound, but none of them perform. Speech that merely pronounces words correctly is functionally useless for filmmaking, audiobooks, or any context where the emotional delivery carries as much meaning as the words themselves. Scenema Audio generates speech with intention, pacing, breath control, and emotional arcs that shift within a single generation, all from a text prompt that describes not just what to say but how to say it.
 
 Built on an audio diffusion transformer extracted from [LTX 2.3](https://github.com/Lightricks/LTX-2)'s 22B parameter audiovisual model, it learned how people actually sound in real scenes: angry, laughing, whispering, crying, singing, exhausted, terrified.
@@ -11,17 +13,26 @@ Built on an audio diffusion transformer extracted from [LTX 2.3](https://github.
 ### Docker (Recommended)
 
 ```bash
-docker pull scenemaai/scenema-audio:latest
+git clone https://github.com/ScenemaAI/scenema-audio.git
+cd scenema-audio
 
-docker run --gpus all -p 8210:8210 \
-  -e HF_TOKEN=your_huggingface_token \
-  scenemaai/scenema-audio:latest
+# Set your HuggingFace token (Gemma 3 access required)
+export HF_TOKEN=your_huggingface_token
+
+# Build and run (models are downloaded on first start)
+docker compose up
 ```
+
+First startup downloads ~38 GB of model checkpoints and caches them in a Docker volume. Subsequent starts are fast.
 
 ### Generate Audio
 
 ```bash
-curl -X POST http://localhost:8210/generate \
+# Using the included script
+python generate.py output.wav
+
+# Or with curl
+curl -X POST http://localhost:8000/generate \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "<speak voice=\"A warm, clear male voice with a slight British accent. Measured, thoughtful pacing.\" gender=\"male\">The old lighthouse had stood on the cliff for over a century, its beam cutting through the fog like a blade of light.</speak>",
@@ -33,7 +44,7 @@ curl -X POST http://localhost:8210/generate \
 ### Voice Design (Preview a Voice)
 
 ```bash
-curl -X POST http://localhost:8210/generate \
+curl -X POST http://localhost:8000/generate \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "<speak voice=\"A young woman with a smoky jazz-singer quality. Low register, intimate.\" gender=\"female\">The city never really sleeps. It just closes its eyes and pretends for a while.</speak>",
@@ -44,20 +55,20 @@ curl -X POST http://localhost:8210/generate \
 
 ### Zero-Shot Voice Cloning
 
-Provide a few seconds of reference audio. The model generates expressive speech from the prompt, then transfers the reference voice's identity onto the performance. The reference does not need to contain any particular emotion, because the emotion comes from the generation stage.
+Provide a few seconds of reference audio. The model generates expressive speech from the prompt, then transfers the reference voice's identity onto the performance. References with some emotions produce better results. 
 
 ```bash
-curl -X POST http://localhost:8210/generate \
+curl -X POST http://localhost:8000/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "<speak voice=\"Gravelly male voice, fast talking, rough.\" gender=\"male\"><action>He completely loses it, shouting</action>What the fuck are you waiting for?!</speak>",
+    "prompt": "<speak voice=\"Gravelly male voice, fast talking, rough.\" gender=\"male\"><action>He completely loses it, shouting</action>What are you waiting for?!</speak>",
     "reference_voice_url": "https://example.com/calm-reference.wav",
     "seed": 42
   }' \
   --output cloned_angry.wav
 ```
 
-Any voice can perform any emotion, even if that voice has never been recorded in that emotional state. The reference only provides identity. The performance comes from the prompt.
+Any voice can perform any emotion, even if that voice has never been recorded in that emotional state. The reference provides identity. The performance comes from the prompt.
 
 ## Prompt Format
 
@@ -129,56 +140,46 @@ Describe what the speaker is DOING and FEELING, not what the audio should sound 
 
 #### Request Body
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `prompt` | string | **required** | `<speak>` XML string. See Prompt Format above. |
-| `mode` | string | `"generate"` | `"generate"` for full pipeline with chunking. `"voice_design"` for a single 15-second voice sample (no chunking, useful for previewing a voice description). |
-| `reference_voice_url` | string | `null` | URL to reference audio (WAV or MP3) for zero-shot voice cloning. A few seconds of clean speech is sufficient. The reference provides identity only; emotional performance comes from the prompt. |
-| `background_sfx` | bool | `false` | Keep generated environmental sound effects in the output. When `false`, non-vocal audio is stripped via MelBandRoFormer vocal separation. Set to `true` when using `shot="scene"` or `shot="wide"` with `<sound>` tags. |
+| Field | Type | Default | Description                                                                                                                                                                                                                                                                                                                                                                             |
+|-------|------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `prompt` | string | **required** | `<speak>` XML string. See Prompt Format above.                                                                                                                                                                                                                                                                                                                                          |
+| `mode` | string | `"generate"` | `"generate"` for full pipeline with chunking. `"voice_design"` for a single 15-second voice sample (no chunking, useful for previewing a voice description).                                                                                                                                                                                                                            |
+| `reference_voice_url` | string | `null` | URL to reference audio (WAV or MP3) for zero-shot voice cloning. A few seconds of clean speech is sufficient. The reference provides identity; emotional performance comes from the prompt.                                                                                                                                                                                             |
+| `background_sfx` | bool | `false` | Keep generated environmental sound effects in the output. When `false`, non-vocal audio is removed. Set to `true` when using `shot="scene"` or `shot="wide"` with `<sound>` tags.                                                                                                                                                                                                       |
 | `validate` | bool | `true` | Enable Whisper speech validation. Each generated chunk is transcribed by faster-whisper and compared against expected text. If word match ratio falls below the threshold, the chunk is regenerated with extended duration and a new seed (up to 3 retries), keeping the best result. Adds <1s per chunk on GPU. Disable for faster generation when prompt reliability is not critical. |
-| `seed` | int | `-1` | Generation seed. `-1` for random. Fixed seeds produce deterministic output for the same prompt and configuration. |
-| `pace` | float | `1.5` | Duration allocation multiplier. Higher values give the model more time per chunk, resulting in slower, more deliberate speech. Lower values produce faster speech. The default 1.5x accounts for LTX's naturally slower speaking pace compared to real-time speech. |
-| `min_match_ratio` | float | `0.90` | Whisper validation threshold. Minimum word match ratio (0.0 to 1.0) between generated audio transcription and expected text. Only used when `validate` is `true`. Lower values accept more pronunciation variance. |
-| `skip_vc` | bool | `false` | Skip voice conversion (SeedVC) post-processing entirely. When `true`, no voice identity transfer or cross-chunk voice consistency normalization is applied. Useful for single-chunk generations where the voice description alone is sufficient. |
-| `vc_steps` | int | `25` | SeedVC diffusion steps. More steps produce higher-quality voice identity transfer at the cost of processing time. Range: 10-50. |
-| `vc_cfg_rate` | float | `0.5` | SeedVC classifier-free guidance rate. Controls how strongly the target voice identity is applied. Higher values produce stronger identity transfer but may reduce naturalness. Range: 0.0-1.0. |
+| `seed` | int | `-1` | Generation seed. `-1` for random. Fixed seeds produce deterministic output for the same prompt and configuration.                                                                                                                                                                                                                                                                       |
+| `pace` | float | `1.5` | Duration allocation multiplier. Higher values give the model more time, resulting in slower, more deliberate speech. Lower values produce faster speech. The default 1.5x accounts for LTX's naturally slower speaking pace compared to real-time speech.                                                                                                                               |
+| `min_match_ratio` | float | `0.90` | Whisper validation threshold. Minimum word match ratio (0.0 to 1.0) between generated audio transcription and expected text. Only used when `validate` is `true`. Lower values accept more pronunciation variance. Lower threshold recommended for languages with accents.                                                                                                              |
+| `skip_vc` | bool | `false` | Skip voice conversion (SeedVC) post-processing entirely. When `true`, no voice identity transfer or cross-chunk voice consistency normalization is applied. Useful for single-chunk generations where the voice description alone is sufficient.                                                                                                                                        |
+| `vc_steps` | int | `25` | SeedVC diffusion steps. More steps produce higher-quality voice identity transfer at the cost of processing time. Range: 10-50.                                                                                                                                                                                                                                                         |
+| `vc_cfg_rate` | float | `0.5` | SeedVC classifier-free guidance rate. Controls how strongly the target voice identity is applied. Higher values produce stronger identity transfer but may reduce naturalness. Range: 0.0-1.0.                                                                                                                                                                                          |
 
 #### Response
 
-Returns WAV audio (48kHz stereo) directly in the response body with `Content-Type: audio/wav`.
-
-### POST /generate (Async Mode)
-
-For production deployments with webhook callbacks and S3/R2 upload:
+Returns JSON with base64-encoded WAV audio:
 
 ```json
 {
-  "job_id": "my-job-123",
-  "webhook_url": "https://your-server.com/callback",
-  "upload_url": "https://s3-presigned-upload-url...",
-  "input": {
-    "prompt": "<speak voice=\"...\" gender=\"male\">...</speak>",
-    "seed": 42,
-    "validate": true,
-    "pace": 1.5
-  }
-}
-```
-
-Returns immediately with `{"job_id": "my-job-123", "status": "processing"}`. When complete, uploads the WAV to the presigned URL and calls the webhook with:
-
-```json
-{
-  "job_id": "my-job-123",
   "status": "succeeded",
+  "audio": "<base64-encoded WAV>",
+  "content_type": "audio/wav",
   "metadata": {
     "duration_s": 12.4,
     "sample_rate": 48000,
     "processing_ms": 8200,
-    "mode": "generate",
     "seed": 42,
+    "mode": "generate",
     "has_reference_voice": false
   }
+}
+```
+
+On error:
+
+```json
+{
+  "status": "failed",
+  "error": "Description of what went wrong"
 }
 ```
 
@@ -268,35 +269,32 @@ gender="male">
 
 ## Hardware Requirements
 
-### Minimum: 24 GB VRAM (RTX 4090, RTX A5000)
+### Minimum: 16 GB VRAM (RTX 4060 Ti 16GB, RTX A4000)
 
-INT8 audio transformer + NF4 Gemma quantization. Everything fits on GPU.
+INT8 audio transformer on GPU, Gemma streams from CPU RAM (requires 32 GB system RAM). Slower text encoding (~7s per chunk) but fully functional.
 
-```bash
-docker run --gpus all -p 8210:8210 \
-  -e AUDIO_CKPT=/app/models/scenema-audio-transformer-int8.safetensors \
-  -e GEMMA_QUANTIZE=nf4 \
-  scenemaai/scenema-audio:latest
-```
+### Standard: 24 GB VRAM (RTX 4090, RTX A5000)
+
+INT8 audio transformer + NF4 Gemma, all on GPU. Default configuration via `docker compose up`.
 
 ### Recommended: 48 GB VRAM (A6000 Ada, A40, L40S)
 
-Full bf16 precision, all models resident on GPU. Best quality, fastest generation.
+Full bf16 precision, all models resident on GPU. Best quality, fastest generation. Set environment variables:
 
-```bash
-docker run --gpus all -p 8210:8210 \
-  scenemaai/scenema-audio:latest
+```
+AUDIO_CKPT=/app/models/scenema-audio-transformer.safetensors
+GEMMA_QUANTIZE=
 ```
 
 ### VRAM Configurations
 
-| Configuration | VRAM Used | Gemma Encode | Notes |
-|--------------|-----------|-------------|-------|
-| INT8 audio + NF4 Gemma | ~18 GB | 0.2s/chunk* | Best for 24 GB cards |
-| bf16 audio + bf16 Gemma (streaming) | ~16 GB GPU + 24 GB RAM | 7.5s/chunk | Low VRAM, slow encode |
-| bf16 audio + bf16 Gemma (resident) | ~40 GB | 0.2s/chunk* | Best quality, needs 48 GB |
+| VRAM | Audio Model | Gemma | Encode Speed | Notes |
+|------|------------|-------|-------------|-------|
+| 16 GB | INT8 (4.9 GB) | CPU streaming | ~7s/chunk | Needs 32 GB system RAM |
+| 24 GB | INT8 (4.9 GB) | NF4 on GPU (~8 GB) | ~0.2s/chunk | Default config |
+| 48 GB | bf16 (9.8 GB) | bf16 on GPU (24 GB) | ~0.2s/chunk | Best quality |
 
-*With [SageAttention 2.2.0](https://github.com/thu-ml/SageAttention) installed. Without SA2, GPU-resident Gemma encode is ~5.5s/chunk.
+VRAM strategy is auto-detected. The service automatically selects the best configuration for your GPU.
 
 ## Performance
 
@@ -361,46 +359,30 @@ Hosted on HuggingFace: [ScenemaAI/scenema-audio](https://huggingface.co/ScenemaA
 | `scenema-audio-pipeline.safetensors` | 6.7 GB | Audio VAE decoder + vocoder + text projection |
 | `scenema-audio-vae-encoder.safetensors` | 42.7 MB | Audio VAE encoder for reference voice encoding |
 
-### How the Checkpoint Was Made
-
-The audio transformer was extracted from the full LTX 2.3 22B audiovisual model by:
-
-1. Loading the distilled checkpoint
-2. Fusing the audio LoRA weights into the base model
-3. Stripping all video-specific layers (video attention, video feed-forward, video-to-audio cross-attention)
-4. Replacing stripped layers with `nn.Identity()` placeholders
-5. Saving the remaining audio-only weights
-
-The pipeline checkpoint contains the audio VAE decoder, vocoder, text embedding projection, and embeddings processor connectors extracted from the full 46 GB distilled pipeline.
-
 ## Building from Source
 
 ```bash
 git clone https://github.com/ScenemaAI/scenema-audio.git
 cd scenema-audio
 
-docker build \
-  --build-arg HF_TOKEN=your_huggingface_token \
-  -t scenema-audio:latest .
-
-docker run --gpus all -p 8210:8210 scenema-audio:latest
+export HF_TOKEN=your_huggingface_token
+docker compose build
+docker compose up
 ```
-
-### Docker Build Arguments
-
-| Arg | Default | Description |
-|-----|---------|-------------|
-| `HF_TOKEN` | required | HuggingFace token with Gemma 3 access |
 
 ### Environment Variables
 
+Set in `docker-compose.yml` or pass via `docker run -e`:
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AUDIO_CKPT` | `/app/models/scenema-audio-transformer.safetensors` | Path to audio transformer checkpoint |
+| `HF_TOKEN` | **required** | HuggingFace token with Gemma 3 access |
+| `AUDIO_CKPT` | `/app/models/scenema-audio-transformer-int8.safetensors` | Path to audio transformer checkpoint |
 | `PIPELINE_CKPT` | `/app/models/scenema-audio-pipeline.safetensors` | Path to pipeline checkpoint |
 | `GEMMA_ROOT` | `/app/models/gemma-3-12b-it` | Path to Gemma 3 12B model directory |
-| `GEMMA_QUANTIZE` | (empty) | Set to `nf4` for NF4 Gemma quantization |
-| `GPU_PORT` | `8210` | HTTP service port |
+| `GEMMA_QUANTIZE` | `nf4` | Gemma quantization. `nf4` for 24 GB cards, empty for bf16 on 48 GB+ |
+| `PORT` | `8000` | HTTP service port |
+| `MODEL_DIR` | `/app/models` | Base directory for model downloads and cache |
 
 ## Limitations
 
