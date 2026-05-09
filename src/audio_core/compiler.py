@@ -211,6 +211,52 @@ def compile_prompt(xml_string: str) -> CompiledPrompt:
     )
 
 
+def extract_sentence_actions(xml_string: str) -> dict[int, list[str]]:
+    """Map sentence indices to their preceding action blocks.
+
+    Walks the XML blocks in order, tracking the most recent action(s).
+    When a text block is encountered, its sentences inherit the pending actions.
+    Only the first sentence of each text block gets the actions (the action
+    precedes the text block in the XML).
+
+    Returns:
+        Dict mapping sentence index (0-based across all speech text) to a list
+        of action strings that precede that sentence.
+    """
+    root = ET.fromstring(xml_string)
+    blocks = _extract_blocks(root)
+
+    sentence_actions: dict[int, list[str]] = {}
+    pending_actions: list[str] = []
+    sentence_idx = 0
+
+    for block in blocks:
+        if isinstance(block, ActionBlock):
+            pending_actions.append(block.text)
+        elif isinstance(block, TextBlock):
+            # Split this text block into sentences to count them
+            text = block.text.strip()
+            sentences = []
+            current = ""
+            for char in text:
+                current += char
+                if char in ".!?":
+                    s = current.strip()
+                    if s:
+                        sentences.append(s)
+                    current = ""
+            if current.strip():
+                sentences.append(current.strip())
+
+            if pending_actions and sentences:
+                sentence_actions[sentence_idx] = pending_actions.copy()
+                pending_actions.clear()
+
+            sentence_idx += len(sentences)
+
+    return sentence_actions
+
+
 def extract_speech_text(xml_string: str) -> str:
     """Extract only the speech text from XML, ignoring actions and sounds.
 

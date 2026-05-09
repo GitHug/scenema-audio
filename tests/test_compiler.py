@@ -8,6 +8,7 @@ from audio_core.compiler import (
     compile_prompt,
     extract_speech_text,
     compile_chunk_prompt,
+    extract_sentence_actions,
 )
 
 
@@ -244,3 +245,55 @@ class TestCompileChunkPrompt:
             voice="Voice",
         )
         assert "Close-up in a person speaking to camera." in prompt
+
+
+class TestExtractSentenceActions:
+    def test_single_action_before_text(self):
+        xml = '<speak voice="V" gender="male"><action>He whispers.</action>Hello world.</speak>'
+        mapping = extract_sentence_actions(xml)
+        assert 0 in mapping
+        assert mapping[0] == ["He whispers."]
+
+    def test_multiple_actions_before_text(self):
+        xml = (
+            '<speak voice="V" gender="male">'
+            "<action>First direction.</action>"
+            "<action>Second direction.</action>"
+            "Hello world."
+            "</speak>"
+        )
+        mapping = extract_sentence_actions(xml)
+        assert 0 in mapping
+        assert mapping[0] == ["First direction.", "Second direction."]
+
+    def test_action_between_text_blocks(self):
+        xml = (
+            '<speak voice="V" gender="female">'
+            "First sentence."
+            "<action>She pauses.</action>"
+            "Second sentence."
+            "</speak>"
+        )
+        mapping = extract_sentence_actions(xml)
+        # Action before second text block -> sentence index 1
+        assert 1 in mapping
+        assert mapping[1] == ["She pauses."]
+
+    def test_no_actions(self):
+        xml = '<speak voice="V" gender="male">Hello world.</speak>'
+        mapping = extract_sentence_actions(xml)
+        assert mapping == {}
+
+    def test_action_before_multi_sentence_text(self):
+        xml = (
+            '<speak voice="V" gender="male">'
+            "<action>He speaks slowly.</action>"
+            "First sentence. Second sentence. Third sentence."
+            "</speak>"
+        )
+        mapping = extract_sentence_actions(xml)
+        # Action maps to first sentence (index 0) only
+        assert 0 in mapping
+        assert mapping[0] == ["He speaks slowly."]
+        assert 1 not in mapping
+        assert 2 not in mapping

@@ -18,7 +18,7 @@ import logging
 import random
 from dataclasses import dataclass
 
-from .compiler import compile_chunk_prompt, compile_prompt
+from .compiler import compile_chunk_prompt, compile_prompt, extract_sentence_actions
 from .validator import validate_prompt
 
 logger = logging.getLogger(__name__)
@@ -290,15 +290,25 @@ def plan_chunks(
             )
         ]
 
+    # Extract action-to-sentence mapping before splitting
+    sentence_action_map = extract_sentence_actions(xml_string)
+
     # Split by Kokoro-estimated duration
-    text_chunks = split_text_by_duration(compiled.speech_text)
+    text_chunks = split_text_by_duration(compiled.speech_text, multiplier=pace)
+
+    # Track which global sentence index each chunk starts at
+    global_sentence_idx = 0
 
     specs: list[ChunkSpec] = []
     for i, (chunk_text, chunk_dur) in enumerate(text_chunks):
+        # Find actions that belong to this chunk's first sentence
+        actions_before = sentence_action_map.get(global_sentence_idx)
+
         chunk_prompt = compile_chunk_prompt(
             speech_text=chunk_text,
             voice=compiled.voice,
             scene=compiled.scene,
+            actions_before=actions_before,
             gender=compiled.gender,
             shot=compiled.shot,
         )
@@ -311,6 +321,10 @@ def plan_chunks(
                 language=compiled.language,
             )
         )
+
+        # Count sentences in this chunk to advance global index
+        chunk_sentences = _split_into_sentences(chunk_text)
+        global_sentence_idx += len(chunk_sentences)
 
     logger.info(
         "Planned %d chunks (%.1fs total estimated)",

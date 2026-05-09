@@ -168,3 +168,34 @@ class TestPlanChunks:
         for chunk in chunks:
             assert chunk.duration_s > 0
             assert chunk.duration_s <= 20.0
+
+    def test_actions_preserved_in_chunks(self):
+        """Action blocks must be included in per-chunk compiled prompts."""
+        xml = (
+            '<speak voice="Warm narrator" gender="female">'
+            "<action>She speaks slowly and carefully.</action>"
+            "First sentence here. Second sentence here. Third sentence here. "
+            "Fourth sentence here. Fifth sentence here. Sixth sentence here. "
+            "Seventh sentence here. Eighth sentence here. Ninth sentence here. "
+            "Tenth sentence here."
+            "<action>She pauses dramatically.</action>"
+            "Eleventh sentence here. Twelfth sentence here."
+            "</speak>"
+        )
+        chunks = plan_chunks(xml, base_seed=100)
+        assert len(chunks) >= 1
+        # First chunk must contain the first action
+        assert "She speaks slowly and carefully." in chunks[0].compiled_prompt
+
+    def test_single_chunk_preserves_actions(self):
+        """Short prompt with action should include it in compiled output."""
+        xml = (
+            '<speak voice="V" gender="male">'
+            "<action>He whispers urgently.</action>"
+            "Run now."
+            "</speak>"
+        )
+        chunks = plan_chunks(xml, base_seed=100)
+        assert len(chunks) == 1
+        assert "He whispers urgently." in chunks[0].compiled_prompt
+        assert "Run now." in chunks[0].compiled_prompt
