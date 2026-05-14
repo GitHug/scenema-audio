@@ -86,7 +86,7 @@ RUN pip install --no-cache-dir \
     "httpx==0.28.1" \
     "psutil==7.2.2" \
     "bitsandbytes==0.49.2" \
-    "gradio>=5.0.0"
+    "gradio>=5.0.0,<6.0.0"
 
 # Kokoro TTS (82 MB, CPU-only, baked)
 RUN pip install --no-cache-dir "kokoro==0.9.4" \
@@ -142,6 +142,7 @@ ENV MELBAND_MODEL_PATH=/app/models/MelBandRoformer_fp16.safetensors
 ENV MELBAND_NODE_PATH=/app/melband_roformer_node
 ENV SEEDVC_PATH=/app/seed-vc
 
+ENV GEMMA_QUANTIZE=nf4
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 ENV PORT=8000
 

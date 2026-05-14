@@ -417,7 +417,17 @@ class AudioProcessor:
         return wav
 
     async def _download_reference(self, url: str) -> str:
-        """Download reference audio from URL to temp file."""
+        """Download reference audio from URL to temp file.
+
+        Supports http(s):// and file:// URLs (file:// for local Gradio uploads).
+        """
+        if url.startswith("file://"):
+            local_path = url[7:]  # strip file://
+            if not os.path.isfile(local_path):
+                raise FileNotFoundError(f"Reference file not found: {local_path}")
+            logger.info("Using local reference: %s", local_path)
+            return local_path
+
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(timeout=60.0, follow_redirects=True)
 

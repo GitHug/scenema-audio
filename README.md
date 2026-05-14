@@ -25,7 +25,7 @@ export HF_TOKEN=your_huggingface_token
 docker compose up
 ```
 
-First startup downloads ~38 GB of model checkpoints and caches them in a Docker volume. Subsequent starts are fast.
+Runs on any NVIDIA GPU with 16 GB+ VRAM. The default configuration uses INT8 audio transformer + NF4 Gemma quantization, with automatic model offloading on smaller cards. First startup downloads ~38 GB of model checkpoints and caches them in a Docker volume. Subsequent starts are fast.
 
 ### Generate Audio
 
@@ -88,17 +88,18 @@ Open [http://localhost:8000/ui](http://localhost:8000/ui) in your browser. The U
 - **Voice Cloning**: Upload reference audio and generate with voice identity transfer
 - **Advanced**: Write raw `<speak>` XML directly for full control
 
-For remote GPU servers (Vast.ai, RunPod), forward the port via SSH:
+For remote GPU servers, forward the port via SSH:
 
 ```bash
-ssh -L 8000:localhost:8000 your_gpu_server
-# Then open http://localhost:8000/ui locally
+ssh -i /path/to/key -L 8000:localhost:8000 user@your_gpu_server
+# Then open http://localhost:8000/ui/ locally
 ```
 
-Or use a public share link (no port forwarding needed):
+Or use a public share link (no port forwarding needed). Gradio opens an outbound tunnel and gives you a `*.gradio.live` URL that anyone can access:
 
 ```bash
 ENABLE_GRADIO=1 GRADIO_SHARE=1 HF_TOKEN=your_token docker compose up
+# Look for the gradio.live URL in the logs
 ```
 
 The Gradio app can also run standalone (useful for development when the API server is already running):
@@ -299,15 +300,15 @@ gender="male">
 
 ### Minimum: 16 GB VRAM (RTX 4060 Ti 16GB, RTX A4000)
 
-INT8 audio transformer on GPU, Gemma streams from CPU RAM (requires 32 GB system RAM). Slower text encoding (~7s per chunk) but fully functional.
+INT8 audio transformer + NF4 Gemma quantization. Models are automatically offloaded between GPU and CPU RAM between pipeline stages (encode, diffuse, decode, voice convert). Requires 32 GB system RAM. Default configuration via `docker compose up`.
 
-### Standard: 24 GB VRAM (RTX 4090, RTX A5000)
+### Recommended: 24 GB VRAM (RTX 4090, RTX A5000)
 
-INT8 audio transformer + NF4 Gemma, all on GPU. Default configuration via `docker compose up`.
+Same INT8 + NF4 config with all models resident on GPU simultaneously. No offloading overhead, fastest generation.
 
-### Recommended: 48 GB VRAM (A6000 Ada, A40, L40S)
+### Full Precision: 48 GB VRAM (A6000 Ada, A40, L40S)
 
-Full bf16 precision, all models resident on GPU. Best quality, fastest generation. Set environment variables:
+bf16 audio transformer + bf16 Gemma, all models resident on GPU. Best quality. Set environment variables:
 
 ```
 AUDIO_CKPT=/app/models/scenema-audio-transformer.safetensors
@@ -316,13 +317,13 @@ GEMMA_QUANTIZE=
 
 ### VRAM Configurations
 
-| VRAM | Audio Model | Gemma | Encode Speed | Notes |
-|------|------------|-------|-------------|-------|
-| 16 GB | INT8 (4.9 GB) | CPU streaming | ~7s/chunk | Needs 32 GB system RAM |
-| 24 GB | INT8 (4.9 GB) | NF4 on GPU (~8 GB) | ~0.2s/chunk | Default config |
-| 48 GB | bf16 (9.8 GB) | bf16 on GPU (24 GB) | ~0.2s/chunk | Best quality |
+| VRAM | Audio Model | Gemma | Behavior | Notes |
+|------|------------|-------|----------|-------|
+| 16 GB | INT8 (4.9 GB) | NF4 (~8 GB) | Auto-offload per stage | **Default config** |
+| 24 GB | INT8 (4.9 GB) | NF4 (~8 GB) | All models resident | Fastest with quantization |
+| 48 GB | bf16 (9.8 GB) | bf16 (24 GB) | All models resident | Best quality |
 
-VRAM strategy is auto-detected. The service automatically selects the best configuration for your GPU.
+VRAM strategy is auto-detected. The engine measures available VRAM at startup and decides whether to offload models between stages or keep everything resident.
 
 ## Performance
 

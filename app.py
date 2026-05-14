@@ -292,20 +292,84 @@ GENERATE_EXAMPLES = [
         "fr",
         "closeup",
     ],
+    # Laughing
+    [
+        "A woman in her 30s, bright and infectious laugh. She can barely get the words out between fits of giggling.",
+        "<action>She starts laughing before she even finishes the sentence</action>\nAnd then he just... he just walked straight into the glass door.\n<action>Completely loses it, doubled over, gasping between words</action>\nIn front of everyone! At his own wedding!",
+        "female",
+        "",
+        "en",
+        "closeup",
+    ],
+    # Crying
+    [
+        "A young man, mid 20s. Thin, shaking voice. Trying not to cry but failing. Raw and unguarded.",
+        "<action>Voice already trembling, eyes wet</action>\nI keep thinking she is going to call.\n<action>Swallows hard, voice cracks</action>\nEvery time the phone rings I think maybe...\n<action>Breaks down, words dissolving into quiet sobs</action>\nI just miss her so much.",
+        "male",
+        "",
+        "en",
+        "closeup",
+    ],
+    # Singing
+    [
+        "A male tenor with a warm folk quality. Acoustic, intimate, like a campfire performance. Gentle vibrato on held notes.",
+        "<action>Strums once, pauses, then begins softly</action>\nBlackbird singing in the dead of night, take these broken wings and learn to fly.\n<action>Voice swells with quiet conviction</action>\nAll your life, you were only waiting for this moment to arise.",
+        "male",
+        "",
+        "en",
+        "closeup",
+    ],
+    # Long narration — Alice in Wonderland
+    [
+        "A deep, soothing male voice. Rich baritone, unhurried. BBC audiobook narrator quality. Warm like dark chocolate. The kind of voice that makes you drowsy.",
+        "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do. Once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it. And what is the use of a book, thought Alice, without pictures or conversations? So she was considering in her own mind, as well as she could, for the hot day made her feel very sleepy and stupid, whether the pleasure of making a daisy chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her.",
+        "male",
+        "",
+        "en",
+        "closeup",
+    ],
 ]
 
 VOICE_DESIGN_EXAMPLES = [
     # [voice, text, gender, scene, language]
     [
-        "A young woman with a smoky jazz-singer quality. Low register, intimate.",
+        "A young woman with a smoky jazz-singer quality. Low register, intimate. Like she is telling you a secret at 2am.",
         "The city never really sleeps. It just closes its eyes and pretends for a while.",
         "female",
         "",
         "en",
     ],
     [
-        "Gravelly male voice, fast talking, rough. Brooklyn accent.",
+        "Gravelly male voice, fast talking, rough. Brooklyn accent. Sounds like he has been smoking for forty years.",
         "You want my advice? Stop asking for advice and start making decisions.",
+        "male",
+        "",
+        "en",
+    ],
+    [
+        "A six-year-old boy, breathless with excitement. High pitched, words tumbling over each other. Slight lisp.",
+        "And then the dinosaur was like RAWR and everyone ran away but I did not because I am brave!",
+        "male",
+        "",
+        "en",
+    ],
+    [
+        "An elderly Japanese woman speaking English with a strong accent. Quiet authority. Every word deliberate, chosen with care. Grandmotherly warmth underneath.",
+        "When I was young, we did not have these things. We had patience. That was enough.",
+        "female",
+        "",
+        "en",
+    ],
+    [
+        "A deep, resonant female contralto. African American preacher cadence. Building intensity, rhythmic. The kind of voice that fills a cathedral.",
+        "I am telling you today, the storm does not last forever. The rain will stop. The sun will come.",
+        "female",
+        "",
+        "en",
+    ],
+    [
+        "A tired male nurse, late 30s. Gentle but exhausted. Slight Irish lilt. The end of a double shift.",
+        "You are doing great, love. Just breathe. I will be right here the whole time.",
         "male",
         "",
         "en",
@@ -379,6 +443,7 @@ def create_demo() -> gr.Blocks:
                             gen_gender = gr.Radio(
                                 ["male", "female"],
                                 label="Gender",
+                                info="Controls he/she pronouns in the compiled prompt. The voice description controls the actual voice.",
                                 value="male",
                             )
                             gen_language = gr.Textbox(
@@ -433,6 +498,20 @@ def create_demo() -> gr.Blocks:
                             interactive=False,
                         )
 
+                def _auto_sfx(text, shot):
+                    return "<sound>" in text or shot in ("wide", "scene")
+
+                gen_text.change(
+                    fn=_auto_sfx,
+                    inputs=[gen_text, gen_shot],
+                    outputs=[gen_sfx],
+                )
+                gen_shot.change(
+                    fn=_auto_sfx,
+                    inputs=[gen_text, gen_shot],
+                    outputs=[gen_sfx],
+                )
+
                 gen_btn.click(
                     fn=generate,
                     inputs=[
@@ -475,6 +554,7 @@ def create_demo() -> gr.Blocks:
                             vd_gender = gr.Radio(
                                 ["male", "female"],
                                 label="Gender",
+                                info="Controls he/she pronouns in the compiled prompt. The voice description controls the actual voice.",
                                 value="male",
                             )
                             vd_language = gr.Textbox(
@@ -550,6 +630,7 @@ def create_demo() -> gr.Blocks:
                             vc_gender = gr.Radio(
                                 ["male", "female"],
                                 label="Gender",
+                                info="Controls he/she pronouns in the compiled prompt. The voice description controls the actual voice.",
                                 value="male",
                             )
                             vc_language = gr.Textbox(
@@ -614,6 +695,20 @@ def create_demo() -> gr.Blocks:
                             language="html",
                             interactive=False,
                         )
+
+                def _auto_sfx_vc(text, shot):
+                    return "<sound>" in text or shot in ("wide", "scene")
+
+                vc_text.change(
+                    fn=_auto_sfx_vc,
+                    inputs=[vc_text, vc_shot],
+                    outputs=[vc_sfx],
+                )
+                vc_shot.change(
+                    fn=_auto_sfx_vc,
+                    inputs=[vc_text, vc_shot],
+                    outputs=[vc_sfx],
+                )
 
                 vc_btn.click(
                     fn=voice_clone,
