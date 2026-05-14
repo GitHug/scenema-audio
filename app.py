@@ -32,10 +32,45 @@ API_URL = os.environ.get("SCENEMA_API_URL", "http://localhost:8000")
 # ── Helpers ────────────────────────────────────────────────────
 
 
+_FEMALE_KEYWORDS = {"female", "woman", "girl", "she", "her ", "mother", "daughter", "lady", "feminine", "actress", "queen", "princess", "grandmother", "grandma", "aunt", "sister", "wife", "soprano", "alto", "contralto", "mezzo"}
+
+LANGUAGES = [
+    ("English", "en"),
+    ("Spanish", "es"),
+    ("French", "fr"),
+    ("German", "de"),
+    ("Italian", "it"),
+    ("Portuguese", "pt"),
+    ("Russian", "ru"),
+    ("Japanese", "ja"),
+    ("Korean", "ko"),
+    ("Chinese", "zh"),
+    ("Arabic", "ar"),
+    ("Hindi", "hi"),
+    ("Dutch", "nl"),
+    ("Polish", "pl"),
+    ("Turkish", "tr"),
+    ("Swedish", "sv"),
+    ("Danish", "da"),
+    ("Finnish", "fi"),
+    ("Thai", "th"),
+    ("Vietnamese", "vi"),
+]
+
+LANGUAGE_CHOICES = [f"{name} ({code})" for name, code in LANGUAGES]
+_LANG_TO_CODE = {f"{name} ({code})": code for name, code in LANGUAGES}
+_CODE_TO_LABEL = {code: f"{name} ({code})" for name, code in LANGUAGES}
+
+
+def _infer_gender(voice: str) -> str:
+    """Infer gender from voice description for pronoun assignment."""
+    lower = voice.lower()
+    return "female" if any(kw in lower for kw in _FEMALE_KEYWORDS) else "male"
+
+
 def _build_xml(
     voice: str,
     text: str,
-    gender: str,
     scene: str = "",
     language: str = "en",
     shot: str = "closeup",
@@ -46,7 +81,11 @@ def _build_xml(
     else is treated as speech content.  The voice/scene/gender
     attributes are escaped; inner XML is passed through so users
     can write <action> tags directly in the text field.
+
+    Gender is inferred from the voice description for pronoun assignment.
     """
+    gender = _infer_gender(voice)
+    language = _LANG_TO_CODE.get(language, language)  # "French (fr)" -> "fr"
     attrs = f'voice="{escape(voice)}" gender="{gender}"'
     if scene:
         attrs += f' scene="{escape(scene)}"'
@@ -99,7 +138,6 @@ def _call_api(payload: dict) -> tuple:
 def generate(
     voice: str,
     text: str,
-    gender: str,
     scene: str,
     language: str,
     shot: str,
@@ -114,7 +152,7 @@ def generate(
     if not text.strip():
         raise gr.Error("Speech text is required.")
 
-    prompt = _build_xml(voice, text, gender, scene, language, shot)
+    prompt = _build_xml(voice, text, scene, language, shot)
     payload = {
         "prompt": prompt,
         "mode": "generate",
@@ -134,7 +172,6 @@ def generate(
 def voice_design(
     voice: str,
     text: str,
-    gender: str,
     scene: str,
     language: str,
     seed: int,
@@ -144,7 +181,7 @@ def voice_design(
     if not text.strip():
         raise gr.Error("Speech text is required.")
 
-    prompt = _build_xml(voice, text, gender, scene, language)
+    prompt = _build_xml(voice, text, scene, language)
     payload = {
         "prompt": prompt,
         "mode": "voice_design",
@@ -160,7 +197,6 @@ def voice_design(
 def voice_clone(
     voice: str,
     text: str,
-    gender: str,
     scene: str,
     language: str,
     shot: str,
@@ -182,21 +218,12 @@ def voice_clone(
             "Upload a few seconds of clean speech."
         )
 
-    # Gradio gives us a filepath for uploaded audio. The API expects
-    # a URL, so we base64-encode and use a data URI. The server's
-    # _download_reference method handles http(s) URLs. For local files
-    # we need to read and pass the audio inline via the reference field.
-    # Since the OSS server expects a URL, we'll write a temp file
-    # approach note: the API needs a URL. For local Gradio, the
-    # reference file is on the same machine, so we pass a file:// URI.
     ref_path = reference_audio
     if isinstance(ref_path, tuple):
-        # Gradio audio component returns (sample_rate, np_array) when
-        # type="numpy", or a filepath string when type="filepath"
         ref_path = ref_path[0] if isinstance(ref_path[0], str) else None
     ref_url = f"file://{os.path.abspath(ref_path)}" if ref_path else None
 
-    prompt = _build_xml(voice, text, gender, scene, language, shot)
+    prompt = _build_xml(voice, text, scene, language, shot)
     payload = {
         "prompt": prompt,
         "mode": "generate",
@@ -243,136 +270,120 @@ def generate_raw(
 # ── Examples ──────────────────────────────────────────────────
 
 GENERATE_EXAMPLES = [
-    # [voice, text, gender, scene, language, shot]
+    # [voice, text, scene, language, shot]
     [
         "A warm, clear male voice with a slight British accent. Measured, thoughtful pacing.",
         "The old lighthouse had stood on the cliff for over a century, its beam cutting through the fog like a blade of light.",
-        "male",
         "",
-        "en",
+        "English (en)",
         "closeup",
     ],
     [
         "Male, mid 60s. Deep baritone with gravel. Slight Southern American inflection. Worn but warm. Nostalgic, firelight cadence. The voice of someone who has seen too much and chosen kindness anyway.",
         "<action>Calm, almost casual. Staring at his hands.</action>\nI used to think I had all the time in the world.\n<action>Voice tightens. Swallows. Fighting to stay composed.</action>\nThen one Tuesday morning, the doctor said three words that changed everything.\n<action>Long pause. Deep breath. When he speaks again, his voice is raw but steady.</action>\nAnd I realized... I hadn't called my son in six months.\n<action>Voice breaks on the last word. Clears throat. Forces a half-laugh.</action>\nFunny how that works, isn't it?",
-        "male",
         "Fireside, night, crickets",
-        "en",
+        "English (en)",
         "closeup",
     ],
     [
         "A soulful female alto singing with raw emotion. Blues-jazz phrasing, slight vibrato on sustained notes.",
         "<action>Soft piano intro, she takes a breath.</action>\nI heard love was a losing game, played it once and lost the same.",
-        "female",
         "",
-        "en",
+        "English (en)",
         "closeup",
     ],
     [
         "A six-year-old girl, bright and excited, speaking fast with breathless enthusiasm. Slight lisp on S sounds.",
         "Mommy look! There is a rainbow and it goes all the way across the whole sky!",
-        "female",
         "",
-        "en",
+        "English (en)",
         "closeup",
     ],
     [
         "Male, mid 40s. Weathered. Urgent, projecting over wind.",
         "<sound>Heavy rain and wind howling</sound>\n<action>He shouts over the storm</action>\nGet the lines! She is pulling loose!\n<sound>Thunder cracks overhead</sound>\nMove! I said move!",
-        "male",
         "Open dock in a thunderstorm, heavy rain",
-        "en",
+        "English (en)",
         "scene",
     ],
     [
         "Female, mid 70s. Soft alto. Native French speaker, Parisian accent. Warm like wool blankets. Unhurried.",
         "<action>Elle s'assied au bord du lit</action>\nAlors, mon petit. Tu veux que je te raconte l'histoire du renard qui a trompé la lune?",
-        "female",
         "Cozy bedroom, lamplight",
-        "fr",
+        "French (fr)",
         "closeup",
     ],
     # Laughing
     [
         "A woman in her 30s, bright and infectious laugh. She can barely get the words out between fits of giggling.",
         "<action>She starts laughing before she even finishes the sentence</action>\nAnd then he just... he just walked straight into the glass door.\n<action>Completely loses it, doubled over, gasping between words</action>\nIn front of everyone! At his own wedding!",
-        "female",
         "",
-        "en",
+        "English (en)",
         "closeup",
     ],
     # Crying
     [
         "A young man, mid 20s. Thin, shaking voice. Trying not to cry but failing. Raw and unguarded.",
         "<action>Voice already trembling, eyes wet</action>\nI keep thinking she is going to call.\n<action>Swallows hard, voice cracks</action>\nEvery time the phone rings I think maybe...\n<action>Breaks down, words dissolving into quiet sobs</action>\nI just miss her so much.",
-        "male",
         "",
-        "en",
+        "English (en)",
         "closeup",
     ],
     # Singing
     [
         "A male tenor with a warm folk quality. Acoustic, intimate, like a campfire performance. Gentle vibrato on held notes.",
         "<action>Strums once, pauses, then begins softly</action>\nBlackbird singing in the dead of night, take these broken wings and learn to fly.\n<action>Voice swells with quiet conviction</action>\nAll your life, you were only waiting for this moment to arise.",
-        "male",
         "",
-        "en",
+        "English (en)",
         "closeup",
     ],
     # Long narration — Alice in Wonderland
     [
         "A deep, soothing male voice. Rich baritone, unhurried. BBC audiobook narrator quality. Warm like dark chocolate. The kind of voice that makes you drowsy.",
         "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do. Once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it. And what is the use of a book, thought Alice, without pictures or conversations? So she was considering in her own mind, as well as she could, for the hot day made her feel very sleepy and stupid, whether the pleasure of making a daisy chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her.",
-        "male",
         "",
-        "en",
+        "English (en)",
         "closeup",
     ],
 ]
 
 VOICE_DESIGN_EXAMPLES = [
-    # [voice, text, gender, scene, language]
+    # [voice, text, scene, language]
     [
         "A young woman with a smoky jazz-singer quality. Low register, intimate. Like she is telling you a secret at 2am.",
         "The city never really sleeps. It just closes its eyes and pretends for a while.",
-        "female",
         "",
-        "en",
+        "English (en)",
     ],
     [
         "Gravelly male voice, fast talking, rough. Brooklyn accent. Sounds like he has been smoking for forty years.",
         "You want my advice? Stop asking for advice and start making decisions.",
-        "male",
         "",
-        "en",
+        "English (en)",
     ],
     [
         "A six-year-old boy, breathless with excitement. High pitched, words tumbling over each other. Slight lisp.",
         "And then the dinosaur was like RAWR and everyone ran away but I did not because I am brave!",
-        "male",
         "",
-        "en",
+        "English (en)",
     ],
     [
         "An elderly Japanese woman speaking English with a strong accent. Quiet authority. Every word deliberate, chosen with care. Grandmotherly warmth underneath.",
         "When I was young, we did not have these things. We had patience. That was enough.",
-        "female",
         "",
-        "en",
+        "English (en)",
     ],
     [
         "A deep, resonant female contralto. African American preacher cadence. Building intensity, rhythmic. The kind of voice that fills a cathedral.",
         "I am telling you today, the storm does not last forever. The rain will stop. The sun will come.",
-        "female",
         "",
-        "en",
+        "English (en)",
     ],
     [
         "A tired male nurse, late 30s. Gentle but exhausted. Slight Irish lilt. The end of a double shift.",
         "You are doing great, love. Just breathe. I will be right here the whole time.",
-        "male",
         "",
-        "en",
+        "English (en)",
     ],
 ]
 
@@ -420,8 +431,9 @@ def create_demo() -> gr.Blocks:
             "Zero-shot expressive voice cloning and speech generation. "
             "Describe how a voice sounds and feels, write what it should say, "
             "and the model generates a full vocal performance.\n\n"
+            "Built by [Scenema AI](https://scenema.ai), the AI filmmaking platform. "
             "**[GitHub](https://github.com/ScenemaAI/scenema-audio)** | "
-            "**[Demos](https://scenema.ai/audio)**"
+            "**[Demos & Samples](https://scenema.ai/audio)**"
         )
 
         with gr.Tabs():
@@ -439,18 +451,12 @@ def create_demo() -> gr.Blocks:
                             placeholder="Write what the voice should say. Use <action> tags for stage directions and <sound> tags for environmental audio.",
                             lines=6,
                         )
-                        with gr.Row():
-                            gen_gender = gr.Radio(
-                                ["male", "female"],
-                                label="Gender",
-                                info="Controls he/she pronouns in the compiled prompt. The voice description controls the actual voice.",
-                                value="male",
-                            )
-                            gen_language = gr.Textbox(
-                                label="Language",
-                                value="en",
-                                max_lines=1,
-                            )
+                        gen_language = gr.Dropdown(
+                            choices=LANGUAGE_CHOICES,
+                            label="Language",
+                            info="The model has only been tested with a limited set of languages. The language tag here is used for Whisper validation.",
+                            value="English (en)",
+                        )
                         gen_scene = gr.Textbox(
                             label="Scene (optional)",
                             placeholder="Environmental context: rain, office hum, crowd noise...",
@@ -515,7 +521,7 @@ def create_demo() -> gr.Blocks:
                 gen_btn.click(
                     fn=generate,
                     inputs=[
-                        gen_voice, gen_text, gen_gender, gen_scene,
+                        gen_voice, gen_text, gen_scene,
                         gen_language, gen_shot, gen_seed, gen_pace,
                         gen_sfx, gen_validate, gen_skip_vc,
                     ],
@@ -525,7 +531,7 @@ def create_demo() -> gr.Blocks:
                 gr.Examples(
                     examples=GENERATE_EXAMPLES,
                     inputs=[
-                        gen_voice, gen_text, gen_gender, gen_scene,
+                        gen_voice, gen_text, gen_scene,
                         gen_language, gen_shot,
                     ],
                     label="Preset Prompts",
@@ -550,18 +556,12 @@ def create_demo() -> gr.Blocks:
                             placeholder="A sentence or two for the voice to perform.",
                             lines=3,
                         )
-                        with gr.Row():
-                            vd_gender = gr.Radio(
-                                ["male", "female"],
-                                label="Gender",
-                                info="Controls he/she pronouns in the compiled prompt. The voice description controls the actual voice.",
-                                value="male",
-                            )
-                            vd_language = gr.Textbox(
-                                label="Language",
-                                value="en",
-                                max_lines=1,
-                            )
+                        vd_language = gr.Dropdown(
+                            choices=LANGUAGE_CHOICES,
+                            label="Language",
+                            info="Sets the language tag for Whisper validation.",
+                            value="English (en)",
+                        )
                         vd_scene = gr.Textbox(
                             label="Scene (optional)",
                             placeholder="Environmental context...",
@@ -588,7 +588,7 @@ def create_demo() -> gr.Blocks:
                 vd_btn.click(
                     fn=voice_design,
                     inputs=[
-                        vd_voice, vd_text, vd_gender, vd_scene,
+                        vd_voice, vd_text, vd_scene,
                         vd_language, vd_seed,
                     ],
                     outputs=[vd_audio, vd_meta, vd_xml],
@@ -597,7 +597,7 @@ def create_demo() -> gr.Blocks:
                 gr.Examples(
                     examples=VOICE_DESIGN_EXAMPLES,
                     inputs=[
-                        vd_voice, vd_text, vd_gender, vd_scene,
+                        vd_voice, vd_text, vd_scene,
                         vd_language,
                     ],
                     label="Preset Voices",
@@ -626,18 +626,12 @@ def create_demo() -> gr.Blocks:
                             label="Reference Voice (upload a few seconds of clean speech)",
                             type="filepath",
                         )
-                        with gr.Row():
-                            vc_gender = gr.Radio(
-                                ["male", "female"],
-                                label="Gender",
-                                info="Controls he/she pronouns in the compiled prompt. The voice description controls the actual voice.",
-                                value="male",
-                            )
-                            vc_language = gr.Textbox(
-                                label="Language",
-                                value="en",
-                                max_lines=1,
-                            )
+                        vc_language = gr.Dropdown(
+                            choices=LANGUAGE_CHOICES,
+                            label="Language",
+                            info="Sets the language tag for Whisper validation.",
+                            value="English (en)",
+                        )
                         vc_scene = gr.Textbox(
                             label="Scene (optional)",
                             placeholder="Environmental context...",
@@ -713,7 +707,7 @@ def create_demo() -> gr.Blocks:
                 vc_btn.click(
                     fn=voice_clone,
                     inputs=[
-                        vc_voice, vc_text, vc_gender, vc_scene,
+                        vc_voice, vc_text, vc_scene,
                         vc_language, vc_shot, vc_ref, vc_seed,
                         vc_pace, vc_steps, vc_cfg, vc_sfx, vc_validate,
                     ],

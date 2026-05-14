@@ -76,6 +76,8 @@ Any voice can perform any emotion, even if that voice has never been recorded in
 
 A built-in web interface for experimenting with voice descriptions, action tags, and all generation parameters without writing code.
 
+![Scenema Audio Gradio UI](https://cdn.scenema.ai/public/content/scenema-audio/gradio-demo.webp)
+
 ```bash
 # Enable the web UI
 ENABLE_GRADIO=1 HF_TOKEN=your_token docker compose up
