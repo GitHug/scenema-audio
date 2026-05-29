@@ -34,6 +34,42 @@ Cloning from a **reference clip** is intentionally not done through MCP (don't s
 through tool calls). Upload the clip directly to Scenema's REST `POST /voices` (multipart `file`
 or base64 `reference_b64`), then reference the resulting `voice_id` in `create_podcast`.
 
+## Cloning a voice from YouTube (or any web video)
+
+Scenema's `reference_voice_url` only accepts a **direct audio file** (`.wav`/`.mp3` bytes over
+`http(s)://` or a local `file://`). A YouTube *watch* URL returns an HTML page, not audio, so it
+**cannot** be passed as a reference directly — you must extract the audio first.
+
+The agent is the right place to do this (it can run code and download files; Scenema stays
+dependency-free). Extract a clean segment with `yt-dlp` + `ffmpeg`, then upload it as a preset:
+
+```bash
+# 1. Pull audio from the video (yt-dlp + ffmpeg required on the agent host)
+yt-dlp -x --audio-format wav -o /tmp/clip.wav "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# 2. Cut a clean ~15s, single-speaker, mono 48 kHz segment (adjust -ss start time)
+ffmpeg -y -i /tmp/clip.wav -ss 30 -t 15 -ac 1 -ar 48000 /tmp/ref.wav
+
+# 3. Save it as a reusable preset (direct to the REST API, not via MCP)
+curl -X POST http://gigatron:8000/voices \
+  -F name="Narrator from video" \
+  -F description="Calm male documentary narrator, mid 40s" \
+  -F gender=male \
+  -F file=@/tmp/ref.wav
+```
+
+The response contains a `voice_id`; reference it in `create_podcast` via
+`{"voice_id": "narrator-from-video"}` (name or id both resolve).
+
+**Pick the segment carefully** — cloning quality depends heavily on the reference. Choose
+**10–20 seconds of clean speech from a single speaker**, with no background music, overlapping
+voices, or heavy compression. Music/SFX and multi-speaker audio degrade the result. (Scenema's
+vocal separator + SeedVC clean up and finish the identity transfer from there.)
+
+> `yt-dlp` extraction can be brittle (some videos are age-gated, region-locked, or need
+> `yt-dlp` updates). Keep `yt-dlp` current (`pip install -U yt-dlp`). Only use clips you have the
+> right to use.
+
 ## Install (on the agent host)
 
 ```bash
