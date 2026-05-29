@@ -78,7 +78,9 @@ for mod_name in [
     "mcp",
     "mcp.server",
     "mcp.server.fastmcp",
-    "voicefixer",
+    "resemble_enhance",
+    "resemble_enhance.enhancer",
+    "resemble_enhance.enhancer.inference",
 ]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()
