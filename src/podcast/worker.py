@@ -119,6 +119,7 @@ class PodcastWorker:
                     "vc_cfg_rate": req.vc_cfg_rate,
                     "background_sfx": req.background_sfx,
                     "enhance": req.enhance,
+                    "denoise_only": req.denoise_only,
                 },
             )
 

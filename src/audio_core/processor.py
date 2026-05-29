@@ -244,6 +244,7 @@ class AudioProcessor:
             "vc_steps": inp.get("vc_steps", 25),
             "skip_vc": inp.get("skip_vc", False),
             "enhance": inp.get("enhance", False),
+            "denoise_only": inp.get("denoise_only", False),
         }
 
     def _voice_design(self, config: dict) -> tuple[np.ndarray, int]:
@@ -334,10 +335,10 @@ class AudioProcessor:
             expected_text = " ".join(c.expected_text for c in chunks)
             wav = validate_and_patch(wav, sr, expected_text)
 
-        # Neural speech restoration (VoiceFixer)
+        # Neural speech restoration (Resemble Enhance)
         if config["enhance"]:
             mono = to_mono(wav)
-            mono = enhance_audio(mono, sr)
+            mono = enhance_audio(mono, sr, denoise_only=config.get("denoise_only", False))
             wav = mono
 
         # Ensure stereo final output

@@ -99,6 +99,7 @@ class PodcastRequest(BaseModel):
     vc_cfg_rate: float = 0.5
     background_sfx: bool = False
     enhance: bool = False
+    denoise_only: bool = False
 
     # Podcast-level controls.
     turn_gap_s: float = 0.4
