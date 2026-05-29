@@ -7,6 +7,11 @@ __pycache__/
 venv/
 *.egg-info/
 
+# Secrets / local config
+.env
+.env.*
+!.env.example
+
 # Local artifacts
 output.wav
 /app/data/
