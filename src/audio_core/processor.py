@@ -337,6 +337,10 @@ class AudioProcessor:
 
         # Neural speech restoration (Resemble Enhance)
         if config["enhance"]:
+            self.engine.free_all()
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
             mono = to_mono(wav)
             mono = enhance_audio(mono, sr, denoise_only=config.get("denoise_only", False))
             wav = mono
