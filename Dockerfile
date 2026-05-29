@@ -27,8 +27,9 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-dev python3-pip \
-    git curl wget xz-utils gcc \
+    git git-lfs curl wget xz-utils gcc \
     libsndfile1 \
+    && git lfs install \
     && rm -rf /var/lib/apt/lists/*
 
 # ffmpeg
