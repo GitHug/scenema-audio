@@ -8,6 +8,7 @@ Handles HTTP sync/async requests for audio generation and voice design.
 Follows the pattern of gpu_x2v/processor.py.
 """
 
+import asyncio
 import io
 import logging
 import os
@@ -124,10 +125,13 @@ class AudioProcessor:
         logger.info("AudioProcessor shutdown")
 
     async def process(self, job: ProcessJob) -> ProcessResult:
-        """Process an audio generation job."""
+        """Process an audio generation job.
+
+        The heavy GPU/CPU work is offloaded to a thread so the async event
+        loop stays responsive (status polling, health checks, Gradio UI).
+        """
         start_time = time.time()
         started_at = datetime.now(timezone.utc).isoformat()
-        torch.cuda.reset_peak_memory_stats()
 
         try:
             if self.engine is None:
@@ -135,20 +139,24 @@ class AudioProcessor:
 
             config = self._parse_input(job)
 
-            if config["mode"] == "voice_design":
-                wav_np, sr = await self._voice_design(config)
-            else:
-                wav_np, sr = await self._generate(config)
+            # Download reference voice (async I/O) before entering the thread.
+            ref_wav_path = None
+            if config.get("reference_voice_url"):
+                ref_wav_path = await self._download_reference(
+                    config["reference_voice_url"]
+                )
+            config["_ref_wav_path"] = ref_wav_path
 
-            wav_bytes = self._encode_wav(wav_np, sr)
-            processing_ms = int((time.time() - start_time) * 1000)
+            wav_np, sr, processing_ms = await asyncio.to_thread(
+                self._process_sync, job.job_id, config, start_time, started_at,
+            )
 
             return ProcessResult(
                 job_id=job.job_id,
                 success=True,
                 output=ProcessOutput(
                     success=True,
-                    data=wav_bytes,
+                    data=self._encode_wav(wav_np, sr),
                     content_type="audio/wav",
                     metadata=self._build_metadata(
                         config, wav_np, sr, processing_ms, started_at
@@ -166,6 +174,24 @@ class AudioProcessor:
                 error=str(e),
                 processing_ms=processing_ms,
             )
+
+    def _process_sync(
+        self,
+        job_id: str,
+        config: dict,
+        start_time: float,
+        started_at: str,
+    ) -> tuple[np.ndarray, int, int]:
+        """Synchronous processing — runs in a worker thread."""
+        torch.cuda.reset_peak_memory_stats()
+
+        if config["mode"] == "voice_design":
+            wav_np, sr = self._voice_design(config)
+        else:
+            wav_np, sr = self._generate(config)
+
+        processing_ms = int((time.time() - start_time) * 1000)
+        return wav_np, sr, processing_ms
 
     def _parse_input(self, job: ProcessJob) -> dict:
         """Parse and validate job input.
@@ -220,7 +246,7 @@ class AudioProcessor:
             "enhance": inp.get("enhance", False),
         }
 
-    async def _voice_design(self, config: dict) -> tuple[np.ndarray, int]:
+    def _voice_design(self, config: dict) -> tuple[np.ndarray, int]:
         """Generate a 15s voice sample for voice design."""
         compiled = compile_prompt(config["prompt"])
         vc, ac = self.engine.encode_text(compiled.prompt)
@@ -238,16 +264,14 @@ class AudioProcessor:
 
         return wav, sr
 
-    async def _generate(self, config: dict) -> tuple[np.ndarray, int]:
+    def _generate(self, config: dict) -> tuple[np.ndarray, int]:
         """Full generation pipeline with chunking and post-processing."""
         chunks = plan_chunks(
             config["prompt"], base_seed=config["seed"], pace=config["pace"]
         )
         logger.info("Planned %d chunk(s)", len(chunks))
 
-        ref_wav_path = None
-        if config["reference_voice_url"]:
-            ref_wav_path = await self._download_reference(config["reference_voice_url"])
+        ref_wav_path = config.get("_ref_wav_path")
 
         # skip_vc: seed every chunk with the reference audio's tail latent,
         # identical to how inter-chunk chaining works. The model sees the
