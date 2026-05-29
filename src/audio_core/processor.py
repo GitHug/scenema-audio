@@ -42,6 +42,7 @@ from .inference import concatenate_chunks, generate_chunks
 from .seedvc import SeedVC
 from .validate_and_patch import validate_and_patch
 from .validator import validate_prompt
+from .enhancer import enhance_audio
 from .vocal_separator import VocalSeparator
 
 logger = logging.getLogger(__name__)
@@ -216,6 +217,7 @@ class AudioProcessor:
             "vc_cfg_rate": inp.get("vc_cfg_rate", 0.5),
             "vc_steps": inp.get("vc_steps", 25),
             "skip_vc": inp.get("skip_vc", False),
+            "enhance": inp.get("enhance", False),
         }
 
     async def _voice_design(self, config: dict) -> tuple[np.ndarray, int]:
@@ -307,6 +309,12 @@ class AudioProcessor:
         if config.get("patch", False):
             expected_text = " ".join(c.expected_text for c in chunks)
             wav = validate_and_patch(wav, sr, expected_text)
+
+        # Neural speech restoration (VoiceFixer)
+        if config["enhance"]:
+            mono = to_mono(wav)
+            mono = enhance_audio(mono, sr)
+            wav = mono
 
         # Ensure stereo final output
         wav = ensure_stereo(wav)

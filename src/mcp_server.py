@@ -62,6 +62,7 @@ async def create_podcast(
     language: str = "en",
     scene: str | None = None,
     seed: int = -1,
+    enhance: bool = False,
 ) -> dict[str, Any]:
     """Submit a transcript for podcast generation.
 
@@ -85,6 +86,9 @@ async def create_podcast(
         scene: Optional default scene for turns that don't set their own.
         seed: Base generation seed; -1 for random. Per-turn seed is
             ``seed + turn_index`` for stable per-speaker voices.
+        enhance: Apply VoiceFixer neural speech restoration to each turn
+            for studio-quality output. Reduces static and artifacts but adds
+            processing time. Default false.
     """
     payload: dict[str, Any] = {
         "transcript": transcript,
@@ -92,6 +96,7 @@ async def create_podcast(
         "format": format,
         "language": language,
         "seed": seed,
+        "enhance": enhance,
     }
     if title is not None:
         payload["title"] = title
