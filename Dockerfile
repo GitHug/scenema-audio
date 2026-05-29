@@ -99,7 +99,9 @@ RUN pip install --no-cache-dir "kokoro==0.9.4" \
 RUN pip install --no-cache-dir "faster-whisper==1.2.1" "ctranslate2==4.7.1"
 
 # Resemble Enhance (speech denoising + enhancement)
-RUN pip install --no-cache-dir "resemble-enhance"
+RUN pip install --no-cache-dir "resemble-enhance" \
+    && python3 -c "from resemble_enhance.enhancer.download import download; download()" \
+    && echo "Resemble Enhance model cached"
 
 # =============================================================================
 # Bake small models (<1 GB)
