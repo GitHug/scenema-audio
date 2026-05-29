@@ -29,6 +29,12 @@ os.environ.setdefault(
 
 from audio_core.processor import AudioProcessor  # noqa: E402
 from common.handlers.base import ProcessJob  # noqa: E402
+from podcast.config import PodcastSettings  # noqa: E402
+from podcast.jobstore import JobStore  # noqa: E402
+from podcast.routes import create_router  # noqa: E402
+from podcast.service import PodcastService  # noqa: E402
+from podcast.voices import VoiceRegistry  # noqa: E402
+from podcast.worker import PodcastWorker  # noqa: E402
 
 # ── Model download ──────────────────────────────────────────────
 
@@ -128,14 +134,38 @@ def _download_models():
 processor = AudioProcessor()
 _semaphore = asyncio.Semaphore(1)
 
+# ── Podcast subsystem ───────────────────────────────────────────
+# Shares the single generation semaphore so podcast turns and /generate
+# requests are mutually serialized on the GPU.
+
+_podcast_settings = PodcastSettings.from_env()
+_job_store = JobStore(_podcast_settings.data_dir)
+_voice_registry = VoiceRegistry(_podcast_settings.voices_dir)
+_podcast_worker = PodcastWorker(
+    processor, _semaphore, _job_store, _voice_registry, _podcast_settings
+)
+_podcast_service = PodcastService(
+    _job_store, _voice_registry, _podcast_worker, _podcast_settings
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     _download_models()
     processor.startup()
+
+    _podcast_settings.data_dir.mkdir(parents=True, exist_ok=True)
+    _job_store.load_all()
+    _voice_registry.load()
+    swept = _job_store.sweep(_podcast_settings.ttl_days)
+    if swept:
+        logger.info("Swept %d expired podcast job(s)", swept)
+    _podcast_worker.start()
+
     logger.info("Scenema Audio ready on port %s", os.environ.get("PORT", "8000"))
     yield
+    await _podcast_worker.stop()
     processor.shutdown()
 
 
@@ -197,6 +227,10 @@ async def generate(request: Request):
         "content_type": output.content_type or "audio/wav",
         "metadata": output.metadata or {},
     }
+
+
+# ── Podcast + voice endpoints ───────────────────────────────────
+app.include_router(create_router(_podcast_service, _podcast_settings))
 
 
 if __name__ == "__main__":

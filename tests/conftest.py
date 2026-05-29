@@ -75,6 +75,9 @@ for mod_name in [
     "model.mel_band_roformer",
     "bitsandbytes",
     "transformers",
+    "mcp",
+    "mcp.server",
+    "mcp.server.fastmcp",
 ]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()

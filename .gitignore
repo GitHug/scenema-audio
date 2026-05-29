@@ -1,1 +1,12 @@
 /.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Local artifacts
+output.wav
+/app/data/

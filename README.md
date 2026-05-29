@@ -217,6 +217,149 @@ On error:
 }
 ```
 
+## Podcast Generation
+
+`POST /generate` is synchronous and single-voice — fine for a clip, too slow for a 20-minute
+program (which is 80+ chunks). The **podcast API** turns a topic *transcript* into a long-form,
+optionally multi-speaker, MP3. It is **asynchronous**: you submit a transcript, get a `job_id`
+back immediately, poll for status, then download the finished MP3.
+
+It is designed for a split deployment: Scenema runs on a GPU box, while an agent (e.g. an
+[MCP](#mcp-server-remote-agent-integration) client) on another machine submits transcripts and
+pulls the audio over a private network. Generation is out of scope here — you bring the
+transcript, Scenema returns the podcast.
+
+### Transcript formats
+
+- **`single`** — plain prose, one speaker. The whole transcript is one turn (the chunker splits
+  it internally for long-form). `speakers` has exactly one entry.
+- **`multi`** — speaker-labeled lines. A line starts a new turn only when the text before its
+  first colon matches a declared speaker label (so `The time was 5:30` is *not* a split).
+  Consecutive same-speaker lines merge; unlabeled lines append to the current turn.
+
+  ```
+  HOST: Welcome back. Today we're talking about steam engines.
+  GUEST: Glad to be here — they're more clever than people think.
+  HOST: Let's start at the beginning. What makes one turn?
+  ```
+
+  Every label used in the transcript must appear in `speakers`, or the request is rejected at
+  submit time (before any GPU work).
+
+### POST /podcast
+
+Validates and queues a job, returns **202** immediately.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `transcript` | string | **required** | The transcript text (see formats above). |
+| `format` | string | `"multi"` | `"single"` or `"multi"`. |
+| `speakers` | object | **required** | Map of speaker label → voice spec. Each value is either `{"voice_id": "..."}` (a saved preset) or `{"description": "...", "gender": "male\|female", "reference_voice_url": "...", "scene": "..."}` (inline, same fields as `/generate`). `gender` is inferred from the description when omitted. |
+| `title` | string | `null` | Podcast title (returned in status; useful as Telegram metadata). |
+| `language` | string | `"en"` | Applied to every turn. |
+| `scene` | string | `null` | Default scene for turns that don't set their own. |
+| `seed` | int | `-1` | Base seed. Per-turn seed is `seed + turn_index` (when not `-1`) for stable per-speaker voices. |
+| `validate` | bool | `true` | Whisper validation per turn (see `/generate`). |
+| `pace`, `min_match_ratio`, `skip_vc`, `vc_steps`, `vc_cfg_rate`, `background_sfx` | — | — | Same meaning as `/generate`, applied per turn. |
+| `turn_gap_s` | float | `0.4` | Silence inserted between turns, in seconds. |
+| `skip_failed_turns` | bool | `false` | If `true`, a turn that fails generation is skipped (recorded in `failed_turns`) instead of failing the whole job. |
+
+```bash
+curl -X POST http://localhost:8000/podcast \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "format": "multi",
+    "title": "How a Steam Engine Works",
+    "transcript": "HOST: Welcome back.\nGUEST: Glad to be here.",
+    "speakers": {
+      "HOST":  {"description": "A warm, curious male host in his 40s", "gender": "male"},
+      "GUEST": {"voice_id": "my-cloned-voice"}
+    }
+  }'
+```
+
+Response (**202 Accepted**):
+
+```json
+{
+  "job_id": "a1b2c3...",
+  "status": "queued",
+  "status_url": "http://gigatron:8000/podcast/a1b2c3...",
+  "audio_url": "http://gigatron:8000/podcast/a1b2c3.../audio.mp3"
+}
+```
+
+### GET /podcast/{job_id}
+
+Poll for progress. `status` moves `queued → running → succeeded | failed`. Progress is
+turn-level (`turns_done` / `turns_total`).
+
+```json
+{
+  "job_id": "a1b2c3...",
+  "status": "running",
+  "title": "How a Steam Engine Works",
+  "turns_total": 42,
+  "turns_done": 17,
+  "failed_turns": [],
+  "duration_s": null,
+  "audio_url": null,
+  "error": null
+}
+```
+
+When `succeeded`, `audio_url` and `duration_s` are populated. The absolute URL is built from
+`PUBLIC_BASE_URL`.
+
+### GET /podcast/{job_id}/audio.mp3
+
+Returns the finished MP3 (`FileResponse`). `404` if the job is unknown, `409` if it hasn't
+succeeded yet.
+
+### Voice presets
+
+Save a voice once, reuse it by `voice_id` across podcasts (and across speakers).
+
+| Method & path | Purpose |
+|---|---|
+| `POST /voices` | Create a preset. Send JSON `{"name","description","gender","reference_b64","reference_ext"}` **or** `multipart/form-data` with a `file` upload plus `name`/`description`/`gender` fields. Clip size capped by `MAX_VOICE_CLIP_MB` (`413` if exceeded). |
+| `GET /voices` | List presets. |
+| `GET /voices/{voice_id}` | Get one preset (also resolvable by name/slug). |
+| `DELETE /voices/{voice_id}` | Delete a preset (`204`). |
+| `GET /voices/{voice_id}/clip` | Download the stored reference clip. |
+
+A preset's clip is passed to the engine as a `file://` URL (no HTTP round-trip). Presets have
+no clip when created from a description alone — the voice is then driven purely by the
+description, exactly like `/generate`.
+
+### Persistence & retention
+
+Jobs and voices live under `PODCAST_DATA_DIR` (`/app/data`, a Docker named volume that survives
+reboots):
+
+```
+jobs/<job_id>/job.json     # status, progress, request snapshot, audio_url, duration_s
+jobs/<job_id>/audio.mp3
+voices/registry.json
+voices/clips/<voice_id>.<ext>
+```
+
+A job that was `running` when the server stopped is marked `failed` ("interrupted by restart")
+on the next startup — there is no auto-resume; resubmit it. On startup, job directories older
+than `PODCAST_TTL_DAYS` are swept. `MAX_PODCAST_TURNS` bounds a single submission.
+
+## MCP Server (Remote Agent Integration)
+
+For driving Scenema from an AI agent on another machine, `src/mcp_server.py` is a thin
+[Model Context Protocol](https://modelcontextprotocol.io/) server (stdio transport) that proxies
+to this REST API over your private network. It runs *next to the agent*, not on the GPU box, and
+exposes `create_podcast`, `get_podcast_status`, `list_voices`, and `create_voice` tools.
+
+The agent submits a transcript via `create_podcast`, polls `get_podcast_status` until
+`succeeded`, then downloads the `audio.mp3` itself and delivers it however it likes (e.g. a chat
+channel). Deploy and configuration instructions are in [`mcp/README.md`](mcp/README.md). The
+`mcp` package is **not** installed in the Scenema GPU image — it's only needed on the agent host.
+
 ## Capabilities
 
 ### Emotional Acting
@@ -408,6 +551,13 @@ Set in `docker-compose.yml` or pass via `docker run -e`:
 | `MODEL_DIR` | `/app/models` | Base directory for model downloads and cache |
 | `ENABLE_GRADIO` | (empty) | Set to `1` to enable the Gradio web UI at `/ui` |
 | `GRADIO_SHARE` | (empty) | Set to `1` to create a public share link (no port forwarding needed) |
+| `PUBLIC_BASE_URL` | `http://localhost:8000` | Base URL prefixed onto podcast `audio_url`/`status_url`. Set to the address remote agents reach this server at (e.g. a private-network hostname or IP). |
+| `PODCAST_DATA_DIR` | `/app/data` | Directory for podcast jobs and saved voices (mount a volume to persist). |
+| `MP3_BITRATE` | `128k` | Bitrate for the encoded podcast MP3. |
+| `TURN_GAP_S` | `0.4` | Default silence (seconds) inserted between turns. |
+| `MAX_VOICE_CLIP_MB` | `25` | Max size of an uploaded voice reference clip. |
+| `MAX_PODCAST_TURNS` | `500` | Max turns allowed in a single podcast submission. |
+| `PODCAST_TTL_DAYS` | `7` | Job directories older than this are swept on startup. `0` disables the sweep. |
 
 ## Limitations
 

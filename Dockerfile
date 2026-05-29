@@ -86,6 +86,7 @@ RUN pip install --no-cache-dir \
     "httpx==0.28.1" \
     "psutil==7.2.2" \
     "bitsandbytes==0.49.2" \
+    "python-multipart==0.0.20" \
     "gradio>=5.0.0,<6.0.0"
 
 # Kokoro TTS (82 MB, CPU-only, baked)
@@ -145,6 +146,11 @@ ENV SEEDVC_PATH=/app/seed-vc
 ENV GEMMA_QUANTIZE=nf4
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 ENV PORT=8000
+
+# Podcast feature: persistent job/voice data (mounted as the podcast-data volume).
+# (The `mcp` package is NOT installed here — the MCP server runs on Mini, not Gigatron.)
+ENV PODCAST_DATA_DIR=/app/data
+RUN mkdir -p /app/data
 
 EXPOSE 8000 7860
 

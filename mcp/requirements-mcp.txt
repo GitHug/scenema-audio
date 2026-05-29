@@ -1,0 +1,9 @@
+# Dependencies for the Scenema Audio MCP server (src/mcp_server.py).
+#
+# Install these on the machine that runs the agent (NOT the GPU box):
+#   pip install -r mcp/requirements-mcp.txt
+#
+# Deliberately minimal — the MCP server is a thin HTTP proxy and has no
+# torch/CUDA/audio dependencies.
+mcp>=1.2.0
+httpx>=0.28.1
