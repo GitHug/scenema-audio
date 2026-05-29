@@ -229,6 +229,9 @@ It is designed for a split deployment: Scenema runs on a GPU box, while an agent
 pulls the audio over a private network. Generation is out of scope here — you bring the
 transcript, Scenema returns the podcast.
 
+For a full end-to-end setup (GPU host + agent host over Tailscale, with Telegram delivery), see
+[`DEPLOY.md`](DEPLOY.md).
+
 ### Transcript formats
 
 - **`single`** — plain prose, one speaker. The whole transcript is one turn (the chunker splits
