@@ -58,8 +58,29 @@ Gigatron is powered off.
 5. **Open the port through Windows Firewall** (PowerShell as admin, one-time) so Mini can reach
    it over Tailscale:
    ```powershell
-   New-NetFirewallRule -DisplayName "Scenema 8000" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
+   New-NetFirewallRule -DisplayName "Scenema 8000" -Direction Inbound -Port 8000 -Protocol TCP -Action Allow -Profile Any
    ```
+
+6. **Forward the port into WSL2** — Docker Desktop on WSL2 binds to `127.0.0.1`, not `0.0.0.0`,
+   so external clients (Mini over Tailscale) can't reach it even with the firewall open. Create a
+   Windows port proxy that forwards to the WSL2 VM's IP (PowerShell as admin):
+   ```powershell
+   # Get the WSL2 VM's current IP
+   wsl hostname -I
+   # e.g. 172.17.169.100 ...  (first IP is the one you want)
+
+   netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8000 connectaddress=<WSL2_IP> connectport=8000
+   ```
+   Verify:
+   ```powershell
+   netsh interface portproxy show all
+   ```
+   > **Note:** WSL2 IPs change on reboot. If connectivity breaks after a restart, re-check with
+   > `wsl hostname -I` and update the proxy:
+   > ```powershell
+   > netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=8000
+   > netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8000 connectaddress=<NEW_WSL2_IP> connectport=8000
+   > ```
 
 ---
 
@@ -129,25 +150,22 @@ No error = good. Record the absolute path (`pwd`) for the next step.
 
 ## Phase 5 — Register the MCP server with Hermes
 
-Add to Hermes's MCP configuration (Hermes connects to any MCP server). Point `command` at the
-**venv's** python so the `mcp`/`httpx` deps resolve, and use your absolute paths:
+Add to Hermes's MCP configuration (`~/.hermes/config.yaml`). Point `command` at the **venv's**
+python so the `mcp`/`httpx` deps resolve, and use your absolute paths:
 
-```json
-{
-  "mcpServers": {
-    "scenema-audio": {
-      "command": "/home/youruser/scenema-audio/.venv/bin/python",
-      "args": ["-m", "mcp_server"],
-      "env": {
-        "PYTHONPATH": "/home/youruser/scenema-audio/src",
-        "SCENEMA_API_URL": "http://gigatron:8000"
-      }
-    }
-  }
-}
+```yaml
+# In ~/.hermes/config.yaml, add under (or create) the mcp_servers: key:
+mcp_servers:
+  scenema-audio:
+    command: /home/youruser/scenema-audio/.venv/bin/python
+    args: ["-m", "mcp_server"]
+    env:
+      PYTHONPATH: /home/youruser/scenema-audio/src
+      SCENEMA_API_URL: http://gigatron:8000
 ```
-Restart Hermes. It should now expose four tools: `create_podcast`, `get_podcast_status`,
-`list_voices`, `create_voice`.
+
+Run `/reload-mcp` in Hermes (or restart it). It should now expose four tools: `create_podcast`,
+`get_podcast_status`, `list_voices`, `create_voice`.
 
 ---
 
@@ -191,7 +209,9 @@ Gigatron.
 | Symptom | Likely cause |
 |---|---|
 | `audio_url` says `localhost` | `PUBLIC_BASE_URL` not set in Gigatron's `.env` |
-| Mini can't reach `gigatron:8000` | MagicDNS off (use the `100.x` IP) or Windows Firewall rule missing |
+| Mini can't reach `gigatron:8000` (timeout) | MagicDNS off (use the `100.x` IP), Windows Firewall rule missing, or port proxy not set |
+| Mini connects but gets empty reply | Port proxy points to `127.0.0.1` instead of the WSL2 IP — update with `netsh interface portproxy` |
+| Connectivity breaks after Gigatron reboot | WSL2 IP changed — re-check with `wsl hostname -I` and update the port proxy |
 | Server won't start, Gemma error | `HF_TOKEN` missing or model license not accepted |
 | Hermes reports "tool not found" | venv path wrong in MCP config, or Hermes not restarted |
 | Job goes `running` → `failed` after a reboot | Gigatron powered off mid-job — no auto-resume by design; resubmit |
