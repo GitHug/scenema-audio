@@ -99,7 +99,36 @@ RUN pip install --no-cache-dir "kokoro==0.9.4" \
 RUN pip install --no-cache-dir "faster-whisper==1.2.1" "ctranslate2==4.7.1"
 
 # Resemble Enhance (speech denoising + enhancement)
-RUN pip install --no-cache-dir "resemble-enhance" \
+# Its dependency pins (torch==2.1.1, numpy==1.26.2, scipy==1.11.4, librosa==0.10.1,
+# matplotlib==3.8.1, pandas==2.1.3) conflict with — and would downgrade — the LTX
+# stack already installed above, and torch==2.1.1 isn't even on the cu128 index. So
+# install it with --no-deps and supply only the genuinely-missing runtime deps at
+# versions compatible with the existing stack (matplotlib/pandas unpinned so pip
+# picks numpy-2 builds). deepspeed is upgraded from resemble-enhance's pinned
+# 0.12.4 (which is import-incompatible with torch 2.7 — it imports a `log` symbol
+# torch removed) to a current release that still exposes the symbols the inference
+# import path reaches (DeepSpeedConfig, runtime.engine.DeepSpeedEngine,
+# runtime.utils.clip_grad_norm_, accelerator.get_accelerator). deepspeed is only
+# imported at module load, never run for inference. DS_BUILD_OPS=0 +
+# TORCH_CUDA_ARCH_LIST avoid deepspeed's build-time nvcc probe (the cudnn-runtime
+# base image has no nvcc).
+# nvcc stub: `import deepspeed` scans op-builder compatibility at import time and,
+# whenever CUDA is available, shells out to `$CUDA_HOME/bin/nvcc -V` to read the
+# CUDA version — which the cudnn-runtime base image lacks, raising an uncaught
+# FileNotFoundError. deepspeed never compiles anything for resemble_enhance
+# inference, so a stub reporting the image's CUDA 12.8 satisfies the probe without
+# adding the full CUDA dev toolkit.
+RUN mkdir -p /usr/local/cuda/bin \
+    && printf '#!/bin/sh\necho "nvcc: NVIDIA (R) Cuda compiler driver"\necho "Cuda compilation tools, release 12.8, V12.8.61"\n' \
+       > /usr/local/cuda/bin/nvcc \
+    && chmod +x /usr/local/cuda/bin/nvcc
+
+RUN TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;12.0" DS_BUILD_OPS=0 \
+    pip install --no-cache-dir \
+      "deepspeed==0.19.0" \
+      "celluloid==0.2.0" "ptflops==0.7.1.2" "resampy==0.4.2" "tabulate==0.9.0" \
+      "matplotlib" "pandas" \
+    && pip install --no-cache-dir --no-deps "resemble-enhance" \
     && python3 -c "from resemble_enhance.enhancer.download import download; download()" \
     && echo "Resemble Enhance model cached"
 
