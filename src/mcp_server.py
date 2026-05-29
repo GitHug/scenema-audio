@@ -150,24 +150,38 @@ async def create_voice(
     name: str,
     description: str,
     gender: str | None = None,
+    reference_audio_path: str | None = None,
 ) -> dict[str, Any]:
-    """Create a reusable voice preset from a text description.
+    """Create a reusable voice preset, optionally cloned from a reference clip.
 
     The new preset can then be used in ``create_podcast`` via
-    ``{"voice_id": "<name-or-id>"}``. This creates a description-only voice;
-    to clone from a reference clip, upload the audio directly to the REST
-    ``POST /voices`` endpoint (multipart ``file`` or base64) — binary audio is
-    not sent through MCP.
+    ``{"voice_id": "<name-or-id>"}``.
+
+    Without ``reference_audio_path`` this creates a description-only voice.
+    With a path to a ``.wav`` or ``.mp3`` file, the voice identity is cloned
+    from that clip (10–30 seconds of clean solo speech works best).
 
     Args:
-        name: Human-friendly preset name (also usable to reference it later).
-        description: Voice description (same style as the ``<speak voice="...">``
-            attribute — age, timbre, accent, delivery).
+        name: Human-friendly preset name (also the voice_id slug used to
+            reference it later in ``create_podcast``).
+        description: Voice description (age, timbre, accent, delivery style).
         gender: "male" or "female"; inferred from the description when omitted.
+        reference_audio_path: Local file path to a reference audio clip for
+            voice cloning. The file is read, base64-encoded, and sent to the
+            server. Omit for a description-only voice.
     """
-    payload = {"name": name, "description": description}
+    payload: dict[str, Any] = {"name": name, "description": description}
     if gender is not None:
         payload["gender"] = gender
+    if reference_audio_path is not None:
+        import base64
+        from pathlib import Path
+
+        path = Path(reference_audio_path)
+        if not path.is_file():
+            return {"error": "file not found", "detail": str(path)}
+        payload["reference_b64"] = base64.b64encode(path.read_bytes()).decode()
+        payload["reference_ext"] = path.suffix or ".wav"
     try:
         async with _client() as client:
             resp = await client.post("/voices", json=payload)
