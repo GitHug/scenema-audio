@@ -27,6 +27,7 @@ services:
       - PODCAST_TTL_DAYS=7
     volumes:
       - model-cache:/app/models
+      - seedvc-cache:/app/seed-vc
       - podcast-data:/app/data
     deploy:
       resources:
@@ -38,4 +39,5 @@ services:
 
 volumes:
   model-cache:
+  seedvc-cache:
   podcast-data:
