@@ -120,6 +120,7 @@ class PodcastWorker:
                     "background_sfx": req.background_sfx,
                     "enhance": req.enhance,
                     "denoise_only": req.denoise_only,
+                    "max_pause_s": req.max_pause_s,
                 },
             )
 

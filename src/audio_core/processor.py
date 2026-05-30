@@ -245,6 +245,7 @@ class AudioProcessor:
             "skip_vc": inp.get("skip_vc", False),
             "enhance": inp.get("enhance", False),
             "denoise_only": inp.get("denoise_only", False),
+            "max_pause_s": inp.get("max_pause_s"),
         }
 
     def _voice_design(self, config: dict) -> tuple[np.ndarray, int]:
@@ -305,16 +306,18 @@ class AudioProcessor:
                 min_match_ratio=config["min_match_ratio"],
             )
 
-        wav, sr = concatenate_chunks(results)
+        max_pause = config.get("max_pause_s")
+        if max_pause is None:
+            max_pause = min(1.0 * config["pace"], 3.0)
+
+        wav, sr = concatenate_chunks(results, max_silence=max_pause)
 
         # Strip background music/SFX from the concatenated audio (single pass)
         if not config["background_sfx"]:
             wav = self._strip_background(wav, sr)
 
-        # Cap silence — scale with pace
-        max_silence = min(0.5 * config["pace"], 1.5)
         wav = shorten_long_silence(
-            wav, sr, max_duration=max_silence, target_duration=max_silence * 0.6
+            wav, sr, max_duration=max_pause, target_duration=max_pause * 0.6
         )
 
         # Apply SeedVC when: reference voice provided, or multiple chunks (voice consistency).

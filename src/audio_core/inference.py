@@ -141,6 +141,7 @@ def concatenate_chunks(
     results: list[AudioResult],
     trim: bool = True,
     normalize: bool = True,
+    max_silence: float = 0.5,
 ) -> tuple[np.ndarray, int]:
     """Concatenate audio chunks with silence trimming and volume normalization.
 
@@ -152,6 +153,7 @@ def concatenate_chunks(
         results: List of AudioResult from generate_chunks().
         trim: Whether to trim silence from chunk boundaries.
         normalize: Whether to normalize volume per chunk.
+        max_silence: Max silence to keep at chunk head/tail in seconds.
 
     Returns:
         Tuple of (concatenated waveform numpy array, sample_rate).
@@ -165,7 +167,7 @@ def concatenate_chunks(
     for i, r in enumerate(results):
         w = r.waveform_np
         if trim:
-            w = trim_silence(w, sr, max_silence=0.5)
+            w = trim_silence(w, sr, max_silence=max_silence)
         if normalize:
             w = normalize_volume(w, sr)
         processed.append(w)

@@ -100,6 +100,7 @@ class PodcastRequest(BaseModel):
     background_sfx: bool = False
     enhance: bool = False
     denoise_only: bool = False
+    max_pause_s: float | None = None
 
     # Podcast-level controls.
     turn_gap_s: float = 0.4

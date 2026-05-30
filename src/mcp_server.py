@@ -64,6 +64,7 @@ async def create_podcast(
     seed: int = -1,
     enhance: bool = False,
     denoise_only: bool = False,
+    max_pause_s: float | None = None,
 ) -> dict[str, Any]:
     """Submit a transcript for podcast generation.
 
@@ -92,6 +93,10 @@ async def create_podcast(
             but adds processing time. Default false.
         denoise_only: When enhance is true, only run the fast denoiser
             (skip the slower diffusion-based enhancer). Default false.
+        max_pause_s: Maximum pause duration in seconds. Controls how long
+            dramatic silences can be. Default scales with pace (pace * 1.0,
+            capped at 3.0s). Set higher (e.g. 2.5) for dramatic narration
+            with long pauses, lower (e.g. 0.5) for fast-paced speech.
     """
     payload: dict[str, Any] = {
         "transcript": transcript,
@@ -102,6 +107,8 @@ async def create_podcast(
         "enhance": enhance,
         "denoise_only": denoise_only,
     }
+    if max_pause_s is not None:
+        payload["max_pause_s"] = max_pause_s
     if title is not None:
         payload["title"] = title
     if scene is not None:
