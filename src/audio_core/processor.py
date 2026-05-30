@@ -337,7 +337,8 @@ class AudioProcessor:
 
         # Neural speech restoration (Resemble Enhance)
         if config["enhance"]:
-            self.engine.free_all()
+            if self.engine._vram:
+                self.engine._vram.free_all()
             import gc
             gc.collect()
             torch.cuda.empty_cache()
