@@ -23,8 +23,10 @@ Two formats:
   colon ("The time was 5:30."). Inline ``<action>``/``<sound>`` tags are
   preserved verbatim and flow through into the compiled prompt.
 
-Consecutive turns by the same speaker are merged so the voice is not
-re-primed mid-thought.
+Consecutive turns by the same speaker are merged when the second block
+is continuation text (no label).  When the speaker re-states their label
+explicitly, a new turn is started — this lets transcript authors force a
+turn boundary for independent prosody (e.g. emphatic repetitions).
 """
 
 import re
@@ -112,20 +114,16 @@ def parse_transcript(
             f"{sorted(known)} followed by ':'."
         )
 
-    # Join lines, drop turns that are empty after stripping, merge runs.
+    # Join lines within each labeled block and drop empty turns.
+    # Each entry in raw_turns was created by an explicit speaker label,
+    # so we do NOT merge consecutive same-speaker entries — an explicit
+    # re-label is an intentional turn boundary for independent prosody.
     merged: list[Turn] = []
     for speaker, lines in raw_turns:
         text = "\n".join(lines).strip()
         if not text:
             continue
-        if merged and merged[-1].speaker == speaker:
-            merged[-1] = Turn(
-                speaker=speaker,
-                text=f"{merged[-1].text}\n{text}",
-                index=merged[-1].index,
-            )
-        else:
-            merged.append(Turn(speaker=speaker, text=text, index=len(merged)))
+        merged.append(Turn(speaker=speaker, text=text, index=len(merged)))
 
     if not merged:
         raise ValueError("Transcript contained speaker labels but no speech text")

@@ -350,7 +350,8 @@ Good (describe the contrast):
     deep gravity, almost reverent, as if the word itself carries weight</action>
     The Warmaster.
 
-Best (split into separate turns for independent prosody):
+Best (split into separate turns — repeating the speaker label forces a
+turn boundary with independent prosody, no alias needed):
     NARRATOR: You are the Warmaster.
     NARRATOR: <action>After a long silence, with much more gravity and
     weight than before, almost reverent</action> The Warmaster.

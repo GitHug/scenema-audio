@@ -52,13 +52,16 @@ def test_multi_multiline_turn():
     assert turns[1].text == "My turn."
 
 
-def test_multi_merges_consecutive_same_speaker():
+def test_multi_explicit_relabel_forces_turn_break():
     text = "HOST: One.\nHOST: Two.\nGUEST: Three."
     turns = parse_transcript(text, "multi", {"HOST", "GUEST"})
-    assert len(turns) == 2
+    assert len(turns) == 3
     assert turns[0].speaker == "HOST"
-    assert turns[0].text == "One.\nTwo."
-    assert turns[1].index == 1  # indices are sequential after merge
+    assert turns[0].text == "One."
+    assert turns[1].speaker == "HOST"
+    assert turns[1].text == "Two."
+    assert turns[2].speaker == "GUEST"
+    assert turns[2].index == 2
 
 
 def test_multi_blank_lines_ignored():
