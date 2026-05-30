@@ -198,6 +198,155 @@ async def create_voice(
         return _error(exc)
 
 
+@mcp.tool()
+async def get_prompt_guide() -> str:
+    """Get the transcript writing guide for Scenema Audio.
+
+    Call this BEFORE writing a transcript to learn the format, action tag
+    syntax, and best practices. The guide includes a worked example showing
+    how to write compelling, expressive narration that takes full advantage
+    of the TTS engine's capabilities.
+    """
+    return """
+# Scenema Audio — Transcript Writing Guide
+
+## Transcript format
+
+For multi-speaker podcasts, each line starts with a speaker label followed
+by a colon. A new turn begins only when the label matches a declared speaker:
+
+    HOST: Welcome to the show.
+    GUEST: Thanks for having me.
+
+For single-narrator format, just write plain prose (no labels needed).
+
+## Action tags — the key to expressive speech
+
+Wrap delivery directions in `<action>...</action>` tags inline in the
+transcript. These control HOW the voice speaks — emotion, pacing, volume,
+intensity. They are the single most important tool for making output sound
+natural and compelling.
+
+Place them BEFORE the text they should affect:
+
+    NARRATOR: <action>Speaking quietly, almost whispering</action> And then it happened.
+
+You can use multiple action tags in one turn to shift delivery mid-sentence:
+
+    NARRATOR: <action>Building intensity, speaking faster</action> The armies clashed
+    across the entire front. Millions of men. <action>Dropping to a near whisper</action>
+    And then silence.
+
+### Effective action tags (use these patterns)
+
+**Emotion / tone:**
+- `<action>Speaking with quiet intensity</action>`
+- `<action>Excited, almost breathless</action>`
+- `<action>Somber, reflective</action>`
+- `<action>With barely contained anger</action>`
+- `<action>Warm and conversational, like talking to a friend</action>`
+
+**Pacing / rhythm:**
+- `<action>Speaking slowly, letting each word land</action>`
+- `<action>Rapid-fire, building momentum</action>`
+- `<action>A long, heavy pause before continuing quietly</action>`
+
+**Volume / intensity:**
+- `<action>Dropping to almost a whisper</action>`
+- `<action>Building to a crescendo</action>`
+- `<action>Leaning in, getting more intense</action>`
+
+**Physical / conversational:**
+- `<action>Sitting back, then leaning forward</action>`
+- `<action>Shaking his head</action>`
+- `<action>Like he's telling you a secret</action>`
+
+### Dramatic pauses
+
+Pauses come from the transcript, not the API. Write them into the action tags:
+
+    <action>He stops speaking and lets the silence hang for a long moment</action>
+
+Set `max_pause_s` to 2.0-3.0 for dramatic narration (default is pace × 1.0).
+Without this, pauses longer than ~1.5s get trimmed.
+
+## Voice descriptions
+
+When creating a voice inline (not using a saved preset), write a natural
+description of how the voice sounds:
+
+    "description": "Deep male voice, mid-40s, slight gravel, speaks with
+     authority but warmth, like a history professor who loves his subject"
+
+Good descriptions mention: age, gender, timbre (deep/bright/gravelly/smooth),
+accent if relevant, and delivery style.
+
+## Scene
+
+The `scene` field sets the acoustic environment. Keep it short and literal —
+anything too descriptive may leak into the narration:
+
+    Good:  "A quiet recording studio"
+    Good:  "A cozy radio booth"
+    Bad:   "A man telling you a story across a table in a dimly lit bar"
+           (the model may narrate "a man telling you a story...")
+
+## Voice cloning
+
+Use `create_voice` with a reference audio clip (10-30 seconds of clean solo
+speech) to clone a real voice. Cloning captures TIMBRE (how the voice sounds),
+not speaking STYLE. Style comes from your transcript and action tags.
+
+## Recommended settings by content type
+
+| Content type        | pace | enhance | max_pause_s | Notes                          |
+|---------------------|------|---------|-------------|--------------------------------|
+| News / briefing     | 1.0  | false   | 0.5         | Fast, clean, no drama          |
+| Conversational      | 1.2  | false   | 1.0         | Natural rhythm                 |
+| Documentary         | 1.5  | true    | 2.0         | Room to breathe                |
+| Dramatic narration  | 1.5  | true    | 2.5-3.0     | Long pauses, emotional range   |
+| Audiobook fiction   | 1.3  | true    | 2.0         | Character voices, pacing       |
+
+## Worked example — dramatic narration (Dan Carlin style)
+
+```
+NARRATOR: <action>Speaking conversationally, like opening a show</action> I want
+you to imagine something for me. I want you to imagine a general. And this isn't
+any general. This is a general who has never lost a battle.
+NARRATOR: <action>Leaning in, getting more intense</action> And then imagine that
+this general looks at the map and sees something that makes his blood run cold.
+<action>He stops speaking and lets the silence hang for a long moment</action> His
+own army. Marching toward him.
+NARRATOR: <action>Dropping his voice lower, almost whispering</action> And that is
+the moment when everything changes.
+```
+
+With speakers:
+```json
+{
+  "speakers": {
+    "NARRATOR": {
+      "voice_id": "dan-carlin-2"
+    }
+  },
+  "enhance": true,
+  "pace": 1.5,
+  "max_pause_s": 2.5
+}
+```
+
+## Common mistakes
+
+1. **No action tags** — output sounds flat and monotone. Always add them.
+2. **Scene too descriptive** — gets narrated as text. Keep it to 3-5 words.
+3. **Expecting cloned voice to match speaking style** — cloning only transfers
+   timbre. Write the style into the transcript with action tags.
+4. **max_pause_s too low for dramatic content** — pauses get clipped. Set 2.0+.
+5. **Walls of text without pacing changes** — break into multiple turns with
+   different action tags to create dynamic delivery.
+"""
+
+
 def main() -> None:
     mcp.run()
 
