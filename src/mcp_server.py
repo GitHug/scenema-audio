@@ -70,7 +70,10 @@ async def create_podcast(
 
     Returns immediately with a job_id and the eventual audio_url; generation
     runs in the background. Poll ``get_podcast_status`` until it succeeds, then
-    download the audio_url yourself.
+    download the MP3 from ``audio_url`` and send it to the user in chat.
+
+    IMPORTANT: Call ``get_prompt_guide()`` before writing your first transcript
+    to learn the action tag syntax and best practices.
 
     Args:
         transcript: The transcript text. For ``format="multi"`` use
@@ -128,8 +131,10 @@ async def get_podcast_status(job_id: str) -> dict[str, Any]:
 
     Returns a dict with ``status`` ("queued" | "running" | "succeeded" |
     "failed"), turn-level progress (``turns_done`` / ``turns_total``), and —
-    once succeeded — ``audio_url`` and ``duration_s``. Poll this until the
-    status is "succeeded", then download ``audio_url`` over the private network.
+    once succeeded — ``audio_url`` and ``duration_s``. Poll this every 30-60
+    seconds until status is "succeeded" (generation takes 5-30 minutes
+    depending on length and enhancement settings), then download the MP3 from
+    ``audio_url`` and send it to the user in chat.
     """
     try:
         async with _client() as client:
