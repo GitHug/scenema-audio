@@ -30,6 +30,20 @@ CHUNK_SECONDS = 30
 OVERLAP_SECONDS = 2
 
 
+def _unload_enhancer():
+    """Unload Resemble Enhance models from GPU to free VRAM."""
+    import gc
+    try:
+        from resemble_enhance.enhancer.inference import load_enhancer
+        if hasattr(load_enhancer, "cache_clear"):
+            load_enhancer.cache_clear()
+    except Exception:
+        pass
+    gc.collect()
+    torch.cuda.empty_cache()
+    logger.info("Resemble Enhance unloaded")
+
+
 def _process_chunk(chunk_wav, sr, device, denoise_only, nfe, solver, lambd, tau):
     """Run enhance or denoise on a single chunk."""
     if denoise_only:
@@ -124,6 +138,8 @@ def enhance_audio(
     except Exception as e:
         logger.warning("Resemble Enhance failed: %s, returning original", e)
         return audio_np
+    finally:
+        _unload_enhancer()
 
 
 def _enhance_single(dwav, sr, device, denoise_only, nfe, solver, lambd, tau):
@@ -143,6 +159,8 @@ def _enhance_single(dwav, sr, device, denoise_only, nfe, solver, lambd, tau):
     except Exception as e:
         logger.warning("Resemble Enhance failed: %s, returning original", e)
         return dwav.numpy()
+    finally:
+        _unload_enhancer()
 
 
 def _crossfade_merge(chunks, sr, overlap_s):
