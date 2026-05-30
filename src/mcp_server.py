@@ -335,6 +335,30 @@ With speakers:
 }
 ```
 
+## Emphatic repetition
+
+When repeating a word or phrase for dramatic effect, always describe HOW
+the repetition differs from the original. The model does not infer
+escalation from repetition alone — it will deliver both identically unless
+you tell it otherwise.
+
+Bad:
+    NARRATOR: You are the Warmaster. <action>Repeats slowly</action> The Warmaster.
+
+Good (describe the contrast):
+    NARRATOR: You are the Warmaster. <action>After a long silence, now with
+    deep gravity, almost reverent, as if the word itself carries weight</action>
+    The Warmaster.
+
+Best (split into separate turns for independent prosody):
+    NARRATOR: You are the Warmaster.
+    NARRATOR: <action>After a long silence, with much more gravity and
+    weight than before, almost reverent</action> The Warmaster.
+
+The same principle applies to any callback or echo: quotes repeated for
+emphasis, refrains, rhetorical repetition. Always describe the emotional
+shift — louder, quieter, slower, heavier, more desperate, more certain.
+
 ## Common mistakes
 
 1. **No action tags** — output sounds flat and monotone. Always add them.
